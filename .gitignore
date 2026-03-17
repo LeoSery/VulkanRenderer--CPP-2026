@@ -1,0 +1,129 @@
+### C++ ###
+*.d
+*.slo
+*.lo
+*.o
+*.obj
+*.gch
+*.pch
+*.so
+*.dylib
+*.dll
+*.mod
+*.smod
+*.lai
+*.la
+*.a
+*.lib
+*.exe
+*.out
+*.app
+
+### Visual Studio ###
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+mono_crash.*
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# VS cache
+.vs/
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# VS profiler / trace
+*.psess
+*.vsp
+*.vspx
+*.sap
+*.e2e
+
+# Misc VS artifacts
+*.ilk
+*.meta
+*.iobj
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.tlog
+*.binlog
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.code-workspace
+
+# JetBrains Rider
+*.sln.iml
+
+### Python (PTVS / scripts) ###
+__pycache__/
+*.pyc
+
+### Node (si tools JS) ###
+node_modules/
+
+### ========================================= ###
+###        VULKAN RENDERER - SPECIFIC         ###
+### ========================================= ###
+
+# Compiled SPIR-V shaders
+*.spv
+
+# External dependencies — NE PAS ignorer
+# (headers et libs tiers committés volontairement)
+!**/external/include/**
+!**/external/lib/**
+
+# Old_Renderer — artefacts de build uniquement, source conservée
+Old_Renderer/.vs/
+Old_Renderer/bin/
+Old_Renderer/build/
+Old_Renderer/[Dd]ebug/
+Old_Renderer/[Rr]elease/
+Old_Renderer/x64/
+Old_Renderer/lib/
+Old_Renderer/**/*.pdb
+Old_Renderer/**/*.ilk
+Old_Renderer/**/*.idb
+
+# New_Renderer — idem
+New_Renderer/.vs/
+New_Renderer/bin/
+New_Renderer/build/
+New_Renderer/[Dd]ebug/
+New_Renderer/[Rr]elease/
+New_Renderer/x64/
+
+# Vulkan validation layer settings (local uniquement)
+vk_layer_settings.txt

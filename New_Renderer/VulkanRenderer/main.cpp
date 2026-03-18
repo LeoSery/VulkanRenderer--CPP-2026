@@ -1,5 +1,10 @@
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <vulkan/vulkan.h>
 
-int main(int argc, char* argv[])
+int main()
 {
-	return 0;
+    glfwInit();
+    glfwTerminate();
+    return 0;
 }

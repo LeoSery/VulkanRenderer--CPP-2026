@@ -1,0 +1,11 @@
+{
+  "name": "vulkan-renderer",
+  "version": "0.1.0",
+  "dependencies": [
+    "glfw3",
+    "glm",
+    "vk-bootstrap",
+    "spirv-reflect",
+    "vulkan-memory-allocator"
+  ]
+}

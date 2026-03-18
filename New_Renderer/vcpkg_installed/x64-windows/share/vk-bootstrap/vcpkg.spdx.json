@@ -1,0 +1,110 @@
+{
+  "$schema": "https://raw.githubusercontent.com/spdx/spdx-spec/v2.2.1/schemas/spdx-schema.json",
+  "spdxVersion": "SPDX-2.2",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "documentNamespace": "https://spdx.org/spdxdocs/vk-bootstrap-x64-windows-1.3.273-1f19ca0a-3798-432e-b096-32e359bdff8f",
+  "name": "vk-bootstrap:x64-windows@1.3.273 347d0c68b5ca9df1151a99a4bd6f26f3dce735514d0c40392f369287b4d9a659",
+  "creationInfo": {
+    "creators": [
+      "Tool: vcpkg-8a83681f921b10d86ae626fd833c253f4f8c355b"
+    ],
+    "created": "2026-03-18T13:17:30Z"
+  },
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "GENERATES",
+      "relatedSpdxElement": "SPDXRef-binary"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-0"
+    },
+    {
+      "spdxElementId": "SPDXRef-port",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-file-1"
+    },
+    {
+      "spdxElementId": "SPDXRef-binary",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-0",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    },
+    {
+      "spdxElementId": "SPDXRef-file-1",
+      "relationshipType": "CONTAINED_BY",
+      "relatedSpdxElement": "SPDXRef-port"
+    }
+  ],
+  "packages": [
+    {
+      "name": "vk-bootstrap",
+      "SPDXID": "SPDXRef-port",
+      "versionInfo": "1.3.273",
+      "downloadLocation": "NOASSERTION",
+      "homepage": "https://github.com/charles-lunarg/vk-bootstrap",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "description": "Vulkan bootstraping library",
+      "comment": "This is the port (recipe) consumed by vcpkg."
+    },
+    {
+      "name": "vk-bootstrap:x64-windows",
+      "SPDXID": "SPDXRef-binary",
+      "versionInfo": "347d0c68b5ca9df1151a99a4bd6f26f3dce735514d0c40392f369287b4d9a659",
+      "downloadLocation": "NONE",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "comment": "This is a binary package built by vcpkg."
+    },
+    {
+      "SPDXID": "SPDXRef-resource-1",
+      "name": "charles-lunarg/vk-bootstrap",
+      "downloadLocation": "git+https://github.com/charles-lunarg/vk-bootstrap@v1.3.273",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "c60567a5330908380efea8ac95036e63321fe1e2e72314068a5117c9c0f64cd8b80bd5e98eed9177f1f84dc4ee10a2a2dd902d111fc1a30f503287a7e4b22640"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "fileName": "./C:/Users/seryl/vcpkg/ports/vk-bootstrap/portfile.cmake",
+      "SPDXID": "SPDXRef-file-0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "279eff6830731b0ea4407321fc8c67cea07887d80fb45bc527605112d0ae6e50"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "fileName": "./C:/Users/seryl/vcpkg/ports/vk-bootstrap/vcpkg.json",
+      "SPDXID": "SPDXRef-file-1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "8ca46db77aea9646e49849101baf8a409b535e9db40f77b7ffcdbdb301a7177c"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ]
+}

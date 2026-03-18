@@ -1,10 +1,15 @@
-#include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
-#include <vulkan/vulkan.h>
+#include "Core/window.h"
+#include "Core/graphics_context.h"
 
 int main()
 {
-    glfwInit();
-    glfwTerminate();
+    Window window(1280, 720, "Vulkan Renderer");
+    GraphicsContext context(window);
+
+    while (!window.ShouldClose())
+    {
+        window.PollEvents();
+    }
+
     return 0;
 }

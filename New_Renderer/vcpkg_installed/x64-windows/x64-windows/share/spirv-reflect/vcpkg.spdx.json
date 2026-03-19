@@ -3,13 +3,13 @@
   "spdxVersion": "SPDX-2.2",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "documentNamespace": "https://spdx.org/spdxdocs/spirv-reflect-x64-windows-1.3.275.0-d25d1bf2-ddbb-4c17-80d7-247db0bcdb00",
-  "name": "spirv-reflect:x64-windows@1.3.275.0 be37f5228f88d15921d3710c1ecc356d4983bbfadccf2ed300c5caa3d1c08ec5",
+  "documentNamespace": "https://spdx.org/spdxdocs/spirv-reflect-x64-windows-1.3.275.0-6f991161-7c4f-4c95-98ea-d479dd6e3afa",
+  "name": "spirv-reflect:x64-windows@1.3.275.0 01958ad7ada18548994f19b7057e541662401733ba29515cecb0368317b87f2f",
   "creationInfo": {
     "creators": [
       "Tool: vcpkg-8a83681f921b10d86ae626fd833c253f4f8c355b"
     ],
-    "created": "2026-03-18T13:17:15Z"
+    "created": "2026-03-18T18:49:30Z"
   },
   "relationships": [
     {
@@ -59,7 +59,7 @@
     {
       "name": "spirv-reflect:x64-windows",
       "SPDXID": "SPDXRef-binary",
-      "versionInfo": "be37f5228f88d15921d3710c1ecc356d4983bbfadccf2ed300c5caa3d1c08ec5",
+      "versionInfo": "01958ad7ada18548994f19b7057e541662401733ba29515cecb0368317b87f2f",
       "downloadLocation": "NONE",
       "licenseConcluded": "Apache-2.0",
       "licenseDeclared": "NOASSERTION",

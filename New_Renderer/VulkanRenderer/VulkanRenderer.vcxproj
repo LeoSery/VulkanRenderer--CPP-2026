@@ -163,10 +163,15 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Core\graphics_context.cpp" />
     <ClCompile Include="src\Core\window.cpp" />
+    <ClCompile Include="src\Utils\VkImages.cpp" />
+    <ClCompile Include="vma_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Core\graphics_context.h" />
     <ClInclude Include="include\Core\window.h" />
+    <ClInclude Include="include\GPU\Image.h" />
+    <ClInclude Include="include\Utils\VkCheck.h" />
+    <ClInclude Include="include\Utils\VkImages.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

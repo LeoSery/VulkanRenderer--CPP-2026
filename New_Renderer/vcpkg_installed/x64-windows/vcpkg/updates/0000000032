@@ -1,0 +1,8 @@
+Package: vk-bootstrap
+Version: 1.3.273
+Depends: vcpkg-cmake, vcpkg-cmake-config, vulkan-headers
+Architecture: x64-windows
+Multi-Arch: same
+Abi: e17c480c6d84d50859dfe0f3ee3662be83513ee867a397e2c27d950498ec4b42
+Description: Vulkan bootstraping library
+Status: install ok half-installed

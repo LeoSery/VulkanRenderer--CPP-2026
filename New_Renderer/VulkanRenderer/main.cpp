@@ -9,6 +9,8 @@ int main()
     while (!window.ShouldClose())
     {
         window.PollEvents();
+        context.BeginFrame();
+        context.EndFrame();
     }
 
     return 0;

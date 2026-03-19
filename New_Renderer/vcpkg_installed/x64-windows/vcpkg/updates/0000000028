@@ -1,0 +1,8 @@
+Package: spirv-reflect
+Version: 1.3.275.0
+Depends: spirv-headers, vcpkg-cmake, vcpkg-cmake-config
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 01958ad7ada18548994f19b7057e541662401733ba29515cecb0368317b87f2f
+Description: SPIRV-Reflect is a lightweight library that provides a C/C++ reflection API for SPIR-V shader bytecode in Vulkan applications.
+Status: install ok half-installed

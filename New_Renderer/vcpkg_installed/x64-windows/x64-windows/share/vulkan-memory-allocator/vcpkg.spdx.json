@@ -3,13 +3,13 @@
   "spdxVersion": "SPDX-2.2",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "documentNamespace": "https://spdx.org/spdxdocs/vulkan-memory-allocator-x64-windows-3.0.1#4-e788763f-628d-4c67-afdc-b6e53a19a5ee",
-  "name": "vulkan-memory-allocator:x64-windows@3.0.1#4 42558ce3754ecffdc4a54e836ac511941c5fd80d63e4a490e4810e481c1cd3cc",
+  "documentNamespace": "https://spdx.org/spdxdocs/vulkan-memory-allocator-x64-windows-3.0.1#4-16195374-db15-4638-b98d-b1002ae8c62f",
+  "name": "vulkan-memory-allocator:x64-windows@3.0.1#4 5324671ac35d0ebda5cf703b28ac82bcfe3cc55cae59e4a12709380d4ad3a49c",
   "creationInfo": {
     "creators": [
       "Tool: vcpkg-8a83681f921b10d86ae626fd833c253f4f8c355b"
     ],
-    "created": "2026-03-18T13:17:34Z"
+    "created": "2026-03-18T18:49:45Z"
   },
   "relationships": [
     {
@@ -69,7 +69,7 @@
     {
       "name": "vulkan-memory-allocator:x64-windows",
       "SPDXID": "SPDXRef-binary",
-      "versionInfo": "42558ce3754ecffdc4a54e836ac511941c5fd80d63e4a490e4810e481c1cd3cc",
+      "versionInfo": "5324671ac35d0ebda5cf703b28ac82bcfe3cc55cae59e4a12709380d4ad3a49c",
       "downloadLocation": "NONE",
       "licenseConcluded": "MIT",
       "licenseDeclared": "NOASSERTION",

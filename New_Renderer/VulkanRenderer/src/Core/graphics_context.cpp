@@ -1,12 +1,59 @@
 #include "Core/graphics_context.h"
-#include "core/window.h"
+#include "Core/window.h"
+#include "GPU/command_pool.h"
+#include "GPU/command_buffer.h"
+#include "GPU/image.h"
 #include "Utils/VkCheck.h"
-#include "Utils/VkImages.h"
 
+#include <vulkan/vulkan.h>
+#include <VkBootstrap.h>
+#include <vma/vk_mem_alloc.h>
 #include <GLFW/glfw3.h>
+
+#include <array>
+#include <vector>
 #include <stdexcept>
+
+struct FrameData
+{
+	CommandBuffer* commandBuffer = nullptr;
+	VkSemaphore isImageAvailable = VK_NULL_HANDLE;
+	VkSemaphore isRenderFinished = VK_NULL_HANDLE;
+};
+
+struct GraphicsContext::Impl
+{
+	// Instance & device
+	vkb::Instance vkbInstance;
+	VkSurfaceKHR surface = VK_NULL_HANDLE;
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	VkDevice device = VK_NULL_HANDLE;
+	VkQueue graphicsQueue = VK_NULL_HANDLE;
+	uint32_t graphicsQueueFamily = 0;
+	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
+
+	// Memory
+	VmaAllocator allocator = VK_NULL_HANDLE;
+
+	// Swapchain
+	vkb::Swapchain vkbSwapchain;
+	std::vector<VkImage> swapchainImages;
+	std::vector<VkImageView> swapchainImageViews;
+	VkExtent2D swapchainExtent{};
+
+	// Render targets
+	Image backbuffer;
+	Image depthbuffer;
+
+	// Pool and FrameData
+	std::unique_ptr<CommandPool> commandPool;
+	std::array<FrameData, FRAMES_IN_FLIGHT> frames;
+	std::array<std::unique_ptr<CommandEncoder>, FRAMES_IN_FLIGHT> encoders;
+	uint32_t currentFrame = 0;
+	uint32_t swapchainImageIndex = 0;
+};
 	
-GraphicsContext::GraphicsContext(Window& window)
+GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl>())
 {
 	InitInstance();
 	InitSurface(window);
@@ -19,131 +66,155 @@ GraphicsContext::GraphicsContext(Window& window)
 
 GraphicsContext::~GraphicsContext()
 {
-	vkDeviceWaitIdle(m_device);
+	vkDeviceWaitIdle(m_pImpl->device);
 
-	// Per-FrameData
-	for (auto& frame : m_frames)
+	for (auto& encoder : m_pImpl->encoders)
 	{
-		vkDestroyCommandPool(m_device, frame.commandPool, nullptr);
-		vkDestroyFence(m_device, frame.renderFence, nullptr);
-		vkDestroySemaphore(m_device, frame.imageAvailable, nullptr);
-		vkDestroySemaphore(m_device, frame.renderFinished, nullptr);
+		encoder.reset();
 	}
 
-	// Render targets
-	vkDestroyImageView(m_device, m_backbuffer.imageView, nullptr);
-	vmaDestroyImage(m_allocator, m_backbuffer.image, m_backbuffer.allocation);
-
-	vkDestroyImageView(m_device, m_depthbuffer.imageView, nullptr);
-	vmaDestroyImage(m_allocator, m_depthbuffer.image, m_depthbuffer.allocation);
-
-	// Swapchain
-	for (auto& view : m_swapchainImageViews)
+	for (auto& frame : m_pImpl->frames)
 	{
-		vkDestroyImageView(m_device, view, nullptr);
+		vkDestroySemaphore(m_pImpl->device, frame.isImageAvailable, nullptr);
+		vkDestroySemaphore(m_pImpl->device, frame.isRenderFinished, nullptr);
 	}
-	vkb::destroy_swapchain(m_vkbSwapchain);
 
-	// Vulkan
-	vmaDestroyAllocator(m_allocator);
-	vkDestroyDevice(m_device, nullptr);
-	vkDestroySurfaceKHR(m_vkbInstance.instance, m_surface, nullptr);
-	vkb::destroy_instance(m_vkbInstance);
+	m_pImpl->commandPool.reset();
+
+	vkDestroyImageView(m_pImpl->device, m_pImpl->backbuffer.imageView, nullptr);
+	vmaDestroyImage(m_pImpl->allocator, m_pImpl->backbuffer.image, m_pImpl->backbuffer.allocation);
+
+	vkDestroyImageView(m_pImpl->device, m_pImpl->depthbuffer.imageView, nullptr);
+	vmaDestroyImage(m_pImpl->allocator, m_pImpl->depthbuffer.image, m_pImpl->depthbuffer.allocation);
+
+	for (auto& view : m_pImpl->swapchainImageViews)
+	{
+		vkDestroyImageView(m_pImpl->device, view, nullptr);
+	}
+
+	vkb::destroy_swapchain(m_pImpl->vkbSwapchain);
+
+	vmaDestroyAllocator(m_pImpl->allocator);
+	vkDestroyDevice(m_pImpl->device, nullptr);
+	vkDestroySurfaceKHR(m_pImpl->vkbInstance.instance, m_pImpl->surface, nullptr);
+	vkb::destroy_instance(m_pImpl->vkbInstance);
 }
 
 void GraphicsContext::BeginFrame()
 {
-	auto& frame = m_frames[m_currentFrame];
+	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
+	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
 
-	VK_CHECK(vkWaitForFences(m_device, 1, &frame.renderFence, VK_TRUE, UINT64_MAX));
-	VK_CHECK(vkResetFences(m_device, 1, &frame.renderFence));
+	frame.commandBuffer->WaitForFence();
+	frame.commandBuffer->ResetFence();
 
-	VK_CHECK(vkAcquireNextImageKHR(m_device, m_vkbSwapchain.swapchain, UINT64_MAX, frame.imageAvailable, VK_NULL_HANDLE, &m_swapchainImageIndex));
+	VK_CHECK(vkAcquireNextImageKHR(
+		m_pImpl->device,
+		m_pImpl->vkbSwapchain.swapchain,
+		UINT64_MAX,
+		frame.isImageAvailable,
+		VK_NULL_HANDLE,
+		&m_pImpl->swapchainImageIndex
+	));
 
-	VK_CHECK(vkResetCommandBuffer(frame.commandBuffer, 0));
+	encoder = frame.commandBuffer->BeginRecording();
 
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	VK_CHECK(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo));
+	encoder->TransitionImageLayout(
+		m_pImpl->backbuffer.image,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+	);
+
+	encoder->ClearColor(m_pImpl->backbuffer.image, 0.05f, 0.05f, 0.2f, 1.0f);
 }
 
 void GraphicsContext::EndFrame()
 {
-	auto& frame = m_frames[m_currentFrame];
-	VkCommandBuffer cmd = frame.commandBuffer;
+	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
+	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
+	auto swapchainImage = m_pImpl->swapchainImages[m_pImpl->swapchainImageIndex];
 
-	TransitionImage(cmd, m_backbuffer.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	// Transition backbuffer layout to TransferSrc so it can be used as blit source
+	encoder->TransitionImageLayout(
+		m_pImpl->backbuffer.image,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+	);
 
-	VkClearColorValue clearColor{ 0.1f, 0.1f, 0.3f, 1.0f };
-	VkImageSubresourceRange range{};
-	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	range.levelCount = VK_REMAINING_MIP_LEVELS;
-	range.layerCount = VK_REMAINING_ARRAY_LAYERS;
-	vkCmdClearColorImage(cmd, m_backbuffer.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+	encoder->TransitionImageLayout(
+		swapchainImage,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+	);
 
-	TransitionImage(cmd, m_backbuffer.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	TransitionImage(cmd, m_swapchainImages[m_swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	// Blit (copy + format conversion) backbuffer HDR to swapchain SDR/LDR
+	encoder->BlitImage(
+		m_pImpl->backbuffer.image,
+		swapchainImage,
+		m_pImpl->swapchainExtent,
+		m_pImpl->swapchainExtent
+	);
 
-	VkImageBlit2 blitRegion{};
-	blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
-	blitRegion.srcOffsets[1] = { (int32_t)m_backbuffer.extent.width, (int32_t)m_backbuffer.extent.height, 1 };
-	blitRegion.dstOffsets[1] = { (int32_t)m_swapchainExtent.width,   (int32_t)m_swapchainExtent.height,   1 };
-	blitRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-	blitRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+	encoder->TransitionImageLayout(
+		swapchainImage,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	);
 
-	VkBlitImageInfo2 blitInfo{};
-	blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-	blitInfo.srcImage = m_backbuffer.image;
-	blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	blitInfo.dstImage = m_swapchainImages[m_swapchainImageIndex];
-	blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	blitInfo.regionCount = 1;
-	blitInfo.pRegions = &blitRegion;
-	blitInfo.filter = VK_FILTER_LINEAR;
+	encoder.reset();
 
-	vkCmdBlitImage2(cmd, &blitInfo);
+	// Submit
+	VkCommandBufferSubmitInfo cmdSubmitInfo{};
+	cmdSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+	cmdSubmitInfo.commandBuffer = frame.commandBuffer->GetCmd();
 
-	TransitionImage(cmd, m_swapchainImages[m_swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	VkSemaphoreSubmitInfo waitInfo{};
+	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+	waitInfo.semaphore = frame.isImageAvailable;
+	waitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
 
-	VK_CHECK(vkEndCommandBuffer(cmd));
-
-	VkCommandBufferSubmitInfo cmdSubmit{};
-	cmdSubmit.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-	cmdSubmit.commandBuffer = cmd;
-
-	VkSemaphoreSubmitInfo waitSem{};
-	waitSem.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	waitSem.semaphore = frame.imageAvailable;
-	waitSem.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	VkSemaphoreSubmitInfo signalSem{};
-	signalSem.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	signalSem.semaphore = frame.renderFinished;
-	signalSem.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+	VkSemaphoreSubmitInfo signalInfo{};
+	signalInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+	signalInfo.semaphore = frame.isRenderFinished;
+	signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
 
 	VkSubmitInfo2 submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 	submitInfo.waitSemaphoreInfoCount = 1;
-	submitInfo.pWaitSemaphoreInfos = &waitSem;
-	submitInfo.commandBufferInfoCount = 1;
-	submitInfo.pCommandBufferInfos = &cmdSubmit;
+	submitInfo.pWaitSemaphoreInfos = &waitInfo;
 	submitInfo.signalSemaphoreInfoCount = 1;
-	submitInfo.pSignalSemaphoreInfos = &signalSem;
+	submitInfo.pSignalSemaphoreInfos = &signalInfo;
+	submitInfo.commandBufferInfoCount = 1;
+	submitInfo.pCommandBufferInfos = &cmdSubmitInfo;
 
-	VK_CHECK(vkQueueSubmit2(m_graphicsQueue, 1, &submitInfo, frame.renderFence));
+	VK_CHECK(vkQueueSubmit2(
+		m_pImpl->graphicsQueue,
+		1, 
+		&submitInfo,
+		frame.commandBuffer->GetFence()
+	));
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &frame.renderFinished;
+	presentInfo.pWaitSemaphores = &frame.isRenderFinished;
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &m_vkbSwapchain.swapchain;
-	presentInfo.pImageIndices = &m_swapchainImageIndex;
+	presentInfo.pSwapchains = &m_pImpl->vkbSwapchain.swapchain;
+	presentInfo.pImageIndices = &m_pImpl->swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(m_graphicsQueue, &presentInfo));
+	VK_CHECK(vkQueuePresentKHR(m_pImpl->graphicsQueue, &presentInfo));
 
-	m_currentFrame = (m_currentFrame + 1) % FRAMES_IN_FLIGHT;
+	m_pImpl->currentFrame = (m_pImpl->currentFrame + 1) % FRAMES_IN_FLIGHT;
+}
+
+VkDevice GraphicsContext::GetDevice() const
+{
+	return m_pImpl->device;
+}
+
+uint32_t GraphicsContext::GetGraphicsQueueFamily() const
+{
+	return m_pImpl->graphicsQueueFamily;
 }
 
 void GraphicsContext::InitInstance()
@@ -152,51 +223,60 @@ void GraphicsContext::InitInstance()
 
 	auto result = builder
 		.set_app_name("Vulkan Renderer")
-		.require_api_version(1, 3, 0)
-		.request_validation_layers()
+		.request_validation_layers(true)
 		.use_default_debug_messenger()
+		.require_api_version(1, 3, 0)
 		.build();
 
 	if (!result)
 	{
-		throw std::runtime_error("Failed to create Vulkan instance");
+		throw std::runtime_error("GraphicsContext > Failed to create Vulkan instance");
 	}
 
-	m_vkbInstance = result.value();
-	m_debugMessenger = m_vkbInstance.debug_messenger;
+	m_pImpl->vkbInstance = result.value();
+	m_pImpl->debugMessenger = m_pImpl->vkbInstance.debug_messenger;
 }
 
 void GraphicsContext::InitSurface(Window& window)
 {
 	VK_CHECK(glfwCreateWindowSurface(
-		m_vkbInstance.instance,
+		m_pImpl->vkbInstance.instance,
 		window.GetHandle(),
 		nullptr,
-		&m_surface));
+		&m_pImpl->surface));
 }
 
 void GraphicsContext::InitDevice()
 {
-	VkPhysicalDeviceFeatures features{};
-	features.samplerAnisotropy = true;
+	// Features Vulkan
+	VkPhysicalDeviceFeatures features10{};
+	features10.samplerAnisotropy = true;
 
-	VkPhysicalDeviceVulkan13Features feature13{};
-	feature13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-	feature13.dynamicRendering = true;
-	feature13.synchronization2 = true;
+	// Features Vulkan 1.3
+	VkPhysicalDeviceVulkan12Features features12{};
+	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	features12.bufferDeviceAddress = true;
+	features12.descriptorIndexing = true;
 
-	vkb::PhysicalDeviceSelector selector{ m_vkbInstance };
+	// Features Vulkan 1.3
+	VkPhysicalDeviceVulkan13Features features13{};
+	features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+	features13.dynamicRendering = true;
+	features13.synchronization2 = true;
+
+	vkb::PhysicalDeviceSelector selector{ m_pImpl->vkbInstance };
 	auto physResult = selector
-		.set_surface(m_surface)
+		.set_surface(m_pImpl->surface)
 		.set_minimum_version(1, 3)
-		.set_required_features(features)
-		.set_required_features_13(feature13)
+		.set_required_features(features10)
+		.set_required_features_12(features12)
+		.set_required_features_13(features13)
 		.prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
 		.select();
 
 	if (!physResult)
 	{
-		throw std::runtime_error("Failed to select physical device");
+		throw std::runtime_error("GraphicsContext > Failed to select physical device : " + physResult.error().message());
 	}
 
 	vkb::DeviceBuilder deviceBuilder{ physResult.value() };
@@ -204,151 +284,167 @@ void GraphicsContext::InitDevice()
 
 	if (!deviceResult)
 	{
-		throw std::runtime_error("Failed to create logical device");
+		throw std::runtime_error("GraphicsContext > Failed to create logical device : " + deviceResult.error().message());
 	}
 
 	vkb::Device vkbDevice = deviceResult.value();
-	m_physicalDevice = physResult.value().physical_device;
-	m_device = vkbDevice.device;
-	m_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-	m_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+	m_pImpl->physicalDevice = physResult.value().physical_device;
+	m_pImpl->device = vkbDevice.device;
+	m_pImpl->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+	m_pImpl->graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 }
 
 void GraphicsContext::InitAllocator()
 {
-	VmaAllocatorCreateInfo info{};
-	info.physicalDevice = m_physicalDevice;
-	info.device = m_device;
-	info.instance = m_vkbInstance.instance;
+	VmaAllocatorCreateInfo allocatorInfo{};
+	allocatorInfo.physicalDevice = m_pImpl->physicalDevice;
+	allocatorInfo.device = m_pImpl->device;
+	allocatorInfo.instance = m_pImpl->vkbInstance.instance;
+	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
-	VK_CHECK(vmaCreateAllocator(&info, &m_allocator));
+	VK_CHECK(vmaCreateAllocator(&allocatorInfo, &m_pImpl->allocator));
 }
 
 void GraphicsContext::InitSwapchain(Window& window)
 {
-	int width, height;
-	glfwGetFramebufferSize(window.GetHandle(), &width, &height);
+	vkb::SwapchainBuilder builder{
+		m_pImpl->physicalDevice,
+		m_pImpl->device,
+		m_pImpl->surface
+	};
 
-	vkb::SwapchainBuilder builder{ m_physicalDevice, m_device, m_surface };
 	auto result = builder
-		.set_desired_format({ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-		.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-		.set_desired_extent(width, height)
-		.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-		.build();
+	.set_desired_format(VkSurfaceFormatKHR{
+		.format = VK_FORMAT_B8G8R8A8_UNORM,
+		.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+		})
+	.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+	.set_desired_extent(
+		static_cast<uint32_t>(window.GetWidth()),
+		static_cast<uint32_t>(window.GetHeight())
+	)
+	.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+	.build();
 
 	if (!result)
 	{
-		throw std::runtime_error("Failed to create swapchain");
+		throw std::runtime_error("GraphicsContext > Failed to create swapchain");
 	}
 
-	m_vkbSwapchain = result.value();
-	m_swapchainImages = m_vkbSwapchain.get_images().value();
-	m_swapchainImageViews = m_vkbSwapchain.get_image_views().value();
-	m_swapchainExtent = m_vkbSwapchain.extent;
+	m_pImpl->vkbSwapchain = result.value();
+	m_pImpl->swapchainImages = m_pImpl->vkbSwapchain.get_images().value();
+	m_pImpl->swapchainImageViews = m_pImpl->vkbSwapchain.get_image_views().value();
+	m_pImpl->swapchainExtent = m_pImpl->vkbSwapchain.extent;
 }
 
 void GraphicsContext::InitImages()
 {
-	{
-		VkImageCreateInfo imageInfo{};
-		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-		imageInfo.extent = { m_swapchainExtent.width, m_swapchainExtent.height, 1 };
-		imageInfo.mipLevels = 1;
-		imageInfo.arrayLayers = 1;
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	VkExtent2D extent = m_pImpl->swapchainExtent;
 
-		VmaAllocationCreateInfo allocInfo{};
-		allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-		allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+	//Backbuffer
+	VkImageCreateInfo backbufferInfo{};
+	backbufferInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	backbufferInfo.imageType = VK_IMAGE_TYPE_2D;
+	backbufferInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backbufferInfo.extent = { extent.width, extent.height, 1 };
+	backbufferInfo.mipLevels = 1;
+	backbufferInfo.arrayLayers = 1;
+	backbufferInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	backbufferInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	backbufferInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+		| VK_IMAGE_USAGE_TRANSFER_DST_BIT
+		| VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+		| VK_IMAGE_USAGE_STORAGE_BIT;
 
-		VK_CHECK(vmaCreateImage(m_allocator, &imageInfo, &allocInfo, &m_backbuffer.image, &m_backbuffer.allocation, nullptr));
+	VmaAllocationCreateInfo backbufferAllocInfo{};
+	backbufferAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	backbufferAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-		VkImageViewCreateInfo viewInfo{};
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = m_backbuffer.image;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
+	VK_CHECK(vmaCreateImage(
+		m_pImpl->allocator,
+		&backbufferInfo,
+		&backbufferAllocInfo,
+		&m_pImpl->backbuffer.image,
+		&m_pImpl->backbuffer.allocation,
+		nullptr
+	));
 
-		VK_CHECK(vkCreateImageView(m_device, &viewInfo, nullptr, &m_backbuffer.imageView));
+	VkImageViewCreateInfo backbufferViewInfo{};
+	backbufferViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	backbufferViewInfo.image = m_pImpl->backbuffer.image;
+	backbufferViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	backbufferViewInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backbufferViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	backbufferViewInfo.subresourceRange.baseMipLevel = 0;
+	backbufferViewInfo.subresourceRange.levelCount = 1;
+	backbufferViewInfo.subresourceRange.baseArrayLayer = 0;
+	backbufferViewInfo.subresourceRange.layerCount = 1;
 
-		m_backbuffer.extent = m_swapchainExtent;
-		m_backbuffer.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	}
+	VK_CHECK(vkCreateImageView(
+		m_pImpl->device,
+		&backbufferViewInfo,
+		nullptr,
+		&m_pImpl->backbuffer.imageView
+	));
 
-	{
-		VkImageCreateInfo imageInfo{};
-		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.format = VK_FORMAT_D32_SFLOAT;
-		imageInfo.extent = { m_swapchainExtent.width, m_swapchainExtent.height, 1 };
-		imageInfo.mipLevels = 1;
-		imageInfo.arrayLayers = 1;
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	//DepthBuffer
+	VkImageCreateInfo depthbufferInfo{};
+	depthbufferInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	depthbufferInfo.imageType = VK_IMAGE_TYPE_2D;
+	depthbufferInfo.format = VK_FORMAT_D32_SFLOAT;
+	depthbufferInfo.extent = { extent.width, extent.height, 1 };
+	depthbufferInfo.mipLevels = 1;
+	depthbufferInfo.arrayLayers = 1;
+	depthbufferInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthbufferInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	depthbufferInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		VmaAllocationCreateInfo allocInfo{};
-		allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-		allocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+	VmaAllocationCreateInfo depthAllocInfo{};
+	depthAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	depthAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-		VK_CHECK(vmaCreateImage(m_allocator, &imageInfo, &allocInfo, &m_depthbuffer.image, &m_depthbuffer.allocation, nullptr));
+	VK_CHECK(vmaCreateImage(
+		m_pImpl->allocator,
+		&depthbufferInfo,
+		&depthAllocInfo,
+		&m_pImpl->depthbuffer.image,
+		&m_pImpl->depthbuffer.allocation,
+		nullptr
+	));
 
-		VkImageViewCreateInfo viewInfo{};
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = m_depthbuffer.image;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = VK_FORMAT_D32_SFLOAT;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
+	VkImageViewCreateInfo depthViewInfo{};
+	depthViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	depthViewInfo.image = m_pImpl->depthbuffer.image;
+	depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	depthViewInfo.format = VK_FORMAT_D32_SFLOAT;
+	depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	depthViewInfo.subresourceRange.baseMipLevel = 0;
+	depthViewInfo.subresourceRange.levelCount = 1;
+	depthViewInfo.subresourceRange.baseArrayLayer = 0;
+	depthViewInfo.subresourceRange.layerCount = 1;
 
-		VK_CHECK(vkCreateImageView(m_device, &viewInfo, nullptr, &m_depthbuffer.imageView));
-
-		m_depthbuffer.extent = m_swapchainExtent;
-		m_depthbuffer.format = VK_FORMAT_D32_SFLOAT;
-	}
+	VK_CHECK(vkCreateImageView(
+		m_pImpl->device,
+		&depthViewInfo,
+		nullptr,
+		&m_pImpl->depthbuffer.imageView
+	));
 }
 
 void GraphicsContext::InitFrameData()
 {
-	VkCommandPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	poolInfo.queueFamilyIndex = m_graphicsQueueFamily;
-	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	m_pImpl->commandPool = std::make_unique<CommandPool>(*this);
 
-	VkCommandBufferAllocateInfo bufferInfo{};
-	bufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	bufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	bufferInfo.commandBufferCount = 1;
+	VkSemaphoreCreateInfo semaphoreInfos{};
+	semaphoreInfos.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	VkFenceCreateInfo fenceInfo{};
-	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-	VkSemaphoreCreateInfo semInfo{};
-	semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-	for (auto& frame : m_frames)
+	// Pre-allocate one CommandBuffer and two semaphores per frame in flight
+	for (auto& frame : m_pImpl->frames)
 	{
-		VK_CHECK(vkCreateCommandPool(m_device, &poolInfo, nullptr, &frame.commandPool));
+		frame.commandBuffer = &m_pImpl->commandPool->Aquire();
 
-		bufferInfo.commandPool = frame.commandPool;
-		VK_CHECK(vkAllocateCommandBuffers(m_device, &bufferInfo, &frame.commandBuffer));
-
-		VK_CHECK(vkCreateFence(m_device, &fenceInfo, nullptr, &frame.renderFence));
-		VK_CHECK(vkCreateSemaphore(m_device, &semInfo, nullptr, &frame.imageAvailable));
-		VK_CHECK(vkCreateSemaphore(m_device, &semInfo, nullptr, &frame.renderFinished));
+		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isImageAvailable));
+		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isRenderFinished));
 	}
 }

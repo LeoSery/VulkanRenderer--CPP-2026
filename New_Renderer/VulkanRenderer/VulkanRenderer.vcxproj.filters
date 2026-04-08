@@ -31,6 +31,9 @@
     <Filter Include="Fichiers sources\VMA">
       <UniqueIdentifier>{4b0e19f9-641a-4a1e-9d1f-2283ed281433}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Fichiers sources\GPU">
+      <UniqueIdentifier>{b0129fb5-7772-4d05-a8eb-11ca7263c55e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -42,11 +45,14 @@
     <ClCompile Include="src\Core\graphics_context.cpp">
       <Filter>Fichiers sources\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\Utils\VkImages.cpp">
-      <Filter>Fichiers sources\Utils</Filter>
-    </ClCompile>
     <ClCompile Include="vma_impl.cpp">
       <Filter>Fichiers sources\VMA</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\command_buffer.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\command_pool.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -59,10 +65,13 @@
     <ClInclude Include="include\Utils\VkCheck.h">
       <Filter>Fichiers d%27en-tête\Utils</Filter>
     </ClInclude>
-    <ClInclude Include="include\Utils\VkImages.h">
-      <Filter>Fichiers d%27en-tête\Utils</Filter>
-    </ClInclude>
     <ClInclude Include="include\GPU\Image.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\command_buffer.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\command_pool.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
   </ItemGroup>

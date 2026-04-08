@@ -13,8 +13,14 @@ public:
 	bool ShouldClose() const;
 	void PollEvents() const;
 
-	GLFWwindow* GetHandle() const { return m_handle; };
+	int GetWidth() const;
+	int GetHeight() const;
+
+	GLFWwindow* GetHandle() const;
 
 private:
 	GLFWwindow* m_handle = nullptr;
+
+	int m_width = 0;
+	int m_height = 0;
 };

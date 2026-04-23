@@ -127,3 +127,6 @@ New_Renderer/x64/
 
 # Vulkan validation layer settings (local uniquement)
 vk_layer_settings.txt
+
+# vulkan shaders
+*.spv

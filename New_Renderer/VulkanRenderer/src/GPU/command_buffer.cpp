@@ -1,5 +1,6 @@
 #include "GPU/command_buffer.h"
 #include "GPU/command_pool.h"
+#include "Utils/VkCheck.h"
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
@@ -26,10 +27,7 @@ CommandEncoder::CommandEncoder(CommandBuffer& owner) : m_pImpl(std::make_unique<
 	beginInfos.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfos.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-	if (vkBeginCommandBuffer(m_pImpl->cmd, &beginInfos) != VK_SUCCESS)
-	{
-		throw std::runtime_error("CommandEncoder > vkBeginCommandBuffer failed");
-	}
+	VK_CHECK(vkBeginCommandBuffer(m_pImpl->cmd, &beginInfos));
 }
 
 CommandEncoder::~CommandEncoder()
@@ -121,27 +119,18 @@ CommandBuffer::CommandBuffer(CommandPool& pool) : m_pImpl(std::make_unique<Impl>
 	allocateInfos.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocateInfos.commandBufferCount = 1;
 
-	if (vkAllocateCommandBuffers(device, &allocateInfos, &m_pImpl->cmd) != VK_SUCCESS)
-	{
-		throw std::runtime_error("CommandBuffer > failed to allocate");
-	}
+	VK_CHECK(vkAllocateCommandBuffers(device, &allocateInfos, &m_pImpl->cmd));
 
 	VkFenceCreateInfo fenceInfos{};
 	fenceInfos.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfos.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	if (vkCreateFence(device, &fenceInfos, nullptr, &m_pImpl->fence) != VK_SUCCESS)
-	{
-		throw std::runtime_error("CommandBuffer > failed to create fence");
-	}
+	VK_CHECK(vkCreateFence(device, &fenceInfos, nullptr, &m_pImpl->fence));
 
 	VkSemaphoreCreateInfo semaphoreInfos{};
 	semaphoreInfos.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (vkCreateSemaphore(device, &semaphoreInfos, nullptr, &m_pImpl->semaphore) != VK_SUCCESS)
-	{
-		throw std::runtime_error("CommandBuffer > failed to create semaphore");
-	}
+	VK_CHECK(vkCreateSemaphore(device, &semaphoreInfos, nullptr, &m_pImpl->semaphore));
 }
 
 CommandBuffer::~CommandBuffer()

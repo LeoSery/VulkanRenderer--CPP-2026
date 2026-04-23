@@ -34,6 +34,9 @@
     <Filter Include="Fichiers sources\GPU">
       <UniqueIdentifier>{b0129fb5-7772-4d05-a8eb-11ca7263c55e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{71bff202-faff-4dd8-b86b-451b0bd5f37e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -52,6 +55,12 @@
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
     <ClCompile Include="src\GPU\command_pool.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\shader.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\pipeline.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
   </ItemGroup>
@@ -74,5 +83,19 @@
     <ClInclude Include="include\GPU\command_pool.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
+    <ClInclude Include="include\GPU\shader.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\pipeline.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\basic.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\basic.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

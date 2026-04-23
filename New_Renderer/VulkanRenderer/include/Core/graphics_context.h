@@ -19,6 +19,7 @@ public:
 	struct Impl;
 
 	VkDevice GetDevice() const;
+	VkPipeline GetPipeline() const;
 	uint32_t GetGraphicsQueueFamily() const;
 
 private:
@@ -29,6 +30,7 @@ private:
 	void InitSwapchain(Window& window);
 	void InitImages();
 	void InitFrameData();
+	void InitPipeline();
 
 	std::unique_ptr<Impl> m_pImpl;
 };

@@ -4,6 +4,8 @@
 #include "GPU/command_buffer.h"
 #include "GPU/image.h"
 #include "Utils/VkCheck.h"
+#include "GPU/shader.h"
+#include "GPU/pipeline.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -51,6 +53,11 @@ struct GraphicsContext::Impl
 	std::array<std::unique_ptr<CommandEncoder>, FRAMES_IN_FLIGHT> encoders;
 	uint32_t currentFrame = 0;
 	uint32_t swapchainImageIndex = 0;
+
+	//Pipeline
+	std::unique_ptr<Shader> vertexShader;
+	std::unique_ptr<Shader> fragmentShader;
+	std::unique_ptr<Pipeline> pipeline;
 };
 	
 GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl>())
@@ -62,38 +69,50 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitSwapchain(window);
 	InitImages();
 	InitFrameData();
+	InitPipeline();
 }
 
 GraphicsContext::~GraphicsContext()
 {
-	vkDeviceWaitIdle(m_pImpl->device);
+	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
 
+	// Destroy in reverse order of construction :
+	// Encoders > Semaphores > CommandPool > Backbuffer > Depthbuffer > SwapchainImageViews > Swapchain > Allocator > Device > Surface > Instance
+
+	// Encoders
 	for (auto& encoder : m_pImpl->encoders)
 	{
 		encoder.reset();
 	}
 
+	// Semaphores
 	for (auto& frame : m_pImpl->frames)
 	{
 		vkDestroySemaphore(m_pImpl->device, frame.isImageAvailable, nullptr);
 		vkDestroySemaphore(m_pImpl->device, frame.isRenderFinished, nullptr);
 	}
 
+	// CommandPool
 	m_pImpl->commandPool.reset();
 
+	// BackBuffer
 	vkDestroyImageView(m_pImpl->device, m_pImpl->backbuffer.imageView, nullptr);
 	vmaDestroyImage(m_pImpl->allocator, m_pImpl->backbuffer.image, m_pImpl->backbuffer.allocation);
 
+	// DepthBuffer
 	vkDestroyImageView(m_pImpl->device, m_pImpl->depthbuffer.imageView, nullptr);
 	vmaDestroyImage(m_pImpl->allocator, m_pImpl->depthbuffer.image, m_pImpl->depthbuffer.allocation);
 
+	// ImageViews
 	for (auto& view : m_pImpl->swapchainImageViews)
 	{
 		vkDestroyImageView(m_pImpl->device, view, nullptr);
 	}
 
+	// Swapchain
 	vkb::destroy_swapchain(m_pImpl->vkbSwapchain);
 
+	// Allocator, Device, Surface and Instance
 	vmaDestroyAllocator(m_pImpl->allocator);
 	vkDestroyDevice(m_pImpl->device, nullptr);
 	vkDestroySurfaceKHR(m_pImpl->vkbInstance.instance, m_pImpl->surface, nullptr);
@@ -105,9 +124,11 @@ void GraphicsContext::BeginFrame()
 	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
 	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
 
+	// Wait for the GPU to finish the previous frame before starting a new one
 	frame.commandBuffer->WaitForFence();
 	frame.commandBuffer->ResetFence();
 
+	// Request the next available image from the swapchain
 	VK_CHECK(vkAcquireNextImageKHR(
 		m_pImpl->device,
 		m_pImpl->vkbSwapchain.swapchain,
@@ -117,15 +138,57 @@ void GraphicsContext::BeginFrame()
 		&m_pImpl->swapchainImageIndex
 	));
 
+	// Begin recording > Writing all GPU commands into the command buffer for later submission
 	encoder = frame.commandBuffer->BeginRecording();
 
+	// Transition backbuffer layout to COLOR_ATTACHMENT - tells the GPU we are going to draw into it
 	encoder->TransitionImageLayout(
 		m_pImpl->backbuffer.image,
 		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	);
 
-	encoder->ClearColor(m_pImpl->backbuffer.image, 0.05f, 0.05f, 0.2f, 1.0f);
+	// Background clear color
+	VkClearValue clearValue{};
+	clearValue.color = { { 0.1f, 0.1f, 0.1f, 1.0f } };
+
+	// Describe the color attachment > Which image to draw into, how to load and store it
+	VkRenderingAttachmentInfo colorAttachementInfos{};
+	colorAttachementInfos.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	colorAttachementInfos.imageView = m_pImpl->backbuffer.imageView;
+	colorAttachementInfos.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	colorAttachementInfos.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	colorAttachementInfos.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	colorAttachementInfos.clearValue = clearValue;
+
+	// Describe the rendering pass > attachments, render area, and layer count
+	VkRenderingInfo renderingInfos{};
+	renderingInfos.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+	renderingInfos.renderArea.extent = m_pImpl->swapchainExtent;
+	renderingInfos.layerCount = 1;
+	renderingInfos.colorAttachmentCount = 1;
+	renderingInfos.pColorAttachments = &colorAttachementInfos;
+
+	vkCmdBeginRendering(frame.commandBuffer->GetCmd(), &renderingInfos);
+
+	// Viewport > transforms NDC coordinates (-1 to 1 from the shader) into screen pixels
+	VkViewport viewportInfos{};
+	viewportInfos.width = static_cast<float>(m_pImpl->swapchainExtent.width);
+	viewportInfos.height = static_cast<float>(m_pImpl->swapchainExtent.height);
+	viewportInfos.minDepth = 0.0f;
+	viewportInfos.maxDepth = 1.0f;
+	vkCmdSetViewport(frame.commandBuffer->GetCmd(), 0, 1, &viewportInfos);
+
+	// Scissor > Discards fragments outside this pixel rectangle
+	VkRect2D scissorInfo{};
+	scissorInfo.extent = m_pImpl->swapchainExtent;
+	vkCmdSetScissor(frame.commandBuffer->GetCmd(), 0, 1, &scissorInfo);
+
+	// Bind the graphics pipeline > Defines shaders and render states for the following draw calls
+	vkCmdBindPipeline(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetPipeline());
+	vkCmdDraw(frame.commandBuffer->GetCmd(), 3, 1, 0, 0); // "3, 1, 0, 0" > 3 Vertices, 1 instance, 0 is for first vertex, 0 is for first instance
+
+	vkCmdEndRendering(frame.commandBuffer->GetCmd());
 }
 
 void GraphicsContext::EndFrame()
@@ -164,45 +227,45 @@ void GraphicsContext::EndFrame()
 	encoder.reset();
 
 	// Submit
-	VkCommandBufferSubmitInfo cmdSubmitInfo{};
-	cmdSubmitInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-	cmdSubmitInfo.commandBuffer = frame.commandBuffer->GetCmd();
+	VkCommandBufferSubmitInfo cmdSubmitInfos{};
+	cmdSubmitInfos.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+	cmdSubmitInfos.commandBuffer = frame.commandBuffer->GetCmd();
 
-	VkSemaphoreSubmitInfo waitInfo{};
-	waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	waitInfo.semaphore = frame.isImageAvailable;
-	waitInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
+	VkSemaphoreSubmitInfo waitInfos{};
+	waitInfos.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+	waitInfos.semaphore = frame.isImageAvailable;
+	waitInfos.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR;
 
-	VkSemaphoreSubmitInfo signalInfo{};
-	signalInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	signalInfo.semaphore = frame.isRenderFinished;
-	signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+	VkSemaphoreSubmitInfo signalInfos{};
+	signalInfos.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+	signalInfos.semaphore = frame.isRenderFinished;
+	signalInfos.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
 
-	VkSubmitInfo2 submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-	submitInfo.waitSemaphoreInfoCount = 1;
-	submitInfo.pWaitSemaphoreInfos = &waitInfo;
-	submitInfo.signalSemaphoreInfoCount = 1;
-	submitInfo.pSignalSemaphoreInfos = &signalInfo;
-	submitInfo.commandBufferInfoCount = 1;
-	submitInfo.pCommandBufferInfos = &cmdSubmitInfo;
+	VkSubmitInfo2 submitInfos{};
+	submitInfos.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+	submitInfos.waitSemaphoreInfoCount = 1;
+	submitInfos.pWaitSemaphoreInfos = &waitInfos;
+	submitInfos.signalSemaphoreInfoCount = 1;
+	submitInfos.pSignalSemaphoreInfos = &signalInfos;
+	submitInfos.commandBufferInfoCount = 1;
+	submitInfos.pCommandBufferInfos = &cmdSubmitInfos;
 
 	VK_CHECK(vkQueueSubmit2(
 		m_pImpl->graphicsQueue,
 		1, 
-		&submitInfo,
+		&submitInfos,
 		frame.commandBuffer->GetFence()
 	));
 
-	VkPresentInfoKHR presentInfo{};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = &frame.isRenderFinished;
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = &m_pImpl->vkbSwapchain.swapchain;
-	presentInfo.pImageIndices = &m_pImpl->swapchainImageIndex;
+	VkPresentInfoKHR presentInfos{};
+	presentInfos.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfos.waitSemaphoreCount = 1;
+	presentInfos.pWaitSemaphores = &frame.isRenderFinished;
+	presentInfos.swapchainCount = 1;
+	presentInfos.pSwapchains = &m_pImpl->vkbSwapchain.swapchain;
+	presentInfos.pImageIndices = &m_pImpl->swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(m_pImpl->graphicsQueue, &presentInfo));
+	VK_CHECK(vkQueuePresentKHR(m_pImpl->graphicsQueue, &presentInfos));
 
 	m_pImpl->currentFrame = (m_pImpl->currentFrame + 1) % FRAMES_IN_FLIGHT;
 }
@@ -210,6 +273,11 @@ void GraphicsContext::EndFrame()
 VkDevice GraphicsContext::GetDevice() const
 {
 	return m_pImpl->device;
+}
+
+VkPipeline GraphicsContext::GetPipeline() const
+{
+	return m_pImpl->pipeline->GetPipeline();
 }
 
 uint32_t GraphicsContext::GetGraphicsQueueFamily() const
@@ -249,28 +317,28 @@ void GraphicsContext::InitSurface(Window& window)
 void GraphicsContext::InitDevice()
 {
 	// Features Vulkan
-	VkPhysicalDeviceFeatures features10{};
-	features10.samplerAnisotropy = true;
+	VkPhysicalDeviceFeatures features10Infos{};
+	features10Infos.samplerAnisotropy = true;
 
 	// Features Vulkan 1.3
-	VkPhysicalDeviceVulkan12Features features12{};
-	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-	features12.bufferDeviceAddress = true;
-	features12.descriptorIndexing = true;
+	VkPhysicalDeviceVulkan12Features features12Infos{};
+	features12Infos.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	features12Infos.bufferDeviceAddress = true;
+	features12Infos.descriptorIndexing = true;
 
 	// Features Vulkan 1.3
-	VkPhysicalDeviceVulkan13Features features13{};
-	features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-	features13.dynamicRendering = true;
-	features13.synchronization2 = true;
+	VkPhysicalDeviceVulkan13Features features13Infos{};
+	features13Infos.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+	features13Infos.dynamicRendering = true;
+	features13Infos.synchronization2 = true;
 
 	vkb::PhysicalDeviceSelector selector{ m_pImpl->vkbInstance };
 	auto physResult = selector
 		.set_surface(m_pImpl->surface)
 		.set_minimum_version(1, 3)
-		.set_required_features(features10)
-		.set_required_features_12(features12)
-		.set_required_features_13(features13)
+		.set_required_features(features10Infos)
+		.set_required_features_12(features12Infos)
+		.set_required_features_13(features13Infos)
 		.prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
 		.select();
 
@@ -297,13 +365,13 @@ void GraphicsContext::InitDevice()
 
 void GraphicsContext::InitAllocator()
 {
-	VmaAllocatorCreateInfo allocatorInfo{};
-	allocatorInfo.physicalDevice = m_pImpl->physicalDevice;
-	allocatorInfo.device = m_pImpl->device;
-	allocatorInfo.instance = m_pImpl->vkbInstance.instance;
-	allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	VmaAllocatorCreateInfo allocatorInfos{};
+	allocatorInfos.physicalDevice = m_pImpl->physicalDevice;
+	allocatorInfos.device = m_pImpl->device;
+	allocatorInfos.instance = m_pImpl->vkbInstance.instance;
+	allocatorInfos.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
-	VK_CHECK(vmaCreateAllocator(&allocatorInfo, &m_pImpl->allocator));
+	VK_CHECK(vmaCreateAllocator(&allocatorInfos, &m_pImpl->allocator));
 }
 
 void GraphicsContext::InitSwapchain(Window& window)
@@ -342,91 +410,96 @@ void GraphicsContext::InitImages()
 {
 	VkExtent2D extent = m_pImpl->swapchainExtent;
 
-	//Backbuffer
-	VkImageCreateInfo backbufferInfo{};
-	backbufferInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	backbufferInfo.imageType = VK_IMAGE_TYPE_2D;
-	backbufferInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	backbufferInfo.extent = { extent.width, extent.height, 1 };
-	backbufferInfo.mipLevels = 1;
-	backbufferInfo.arrayLayers = 1;
-	backbufferInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	backbufferInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	backbufferInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+	//Backbuffer > Intermediate render target
+	// We render into this image instead of directly into the swapchain.
+	// Once rendering is done, we blit (Copy) it to the swapchain image for presentation (Show).
+	// Using an intermediate buffer allows us to render at a different resolution than the swapchain, and to use HDR formats the swapchain may not support.
+	VkImageCreateInfo backbufferInfos{};
+	backbufferInfos.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	backbufferInfos.imageType = VK_IMAGE_TYPE_2D;
+	backbufferInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backbufferInfos.extent = { extent.width, extent.height, 1 };
+	backbufferInfos.mipLevels = 1;
+	backbufferInfos.arrayLayers = 1;
+	backbufferInfos.samples = VK_SAMPLE_COUNT_1_BIT;
+	backbufferInfos.tiling = VK_IMAGE_TILING_OPTIMAL;
+	backbufferInfos.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT
 		| VK_IMAGE_USAGE_TRANSFER_DST_BIT
 		| VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
 		| VK_IMAGE_USAGE_STORAGE_BIT;
 
-	VmaAllocationCreateInfo backbufferAllocInfo{};
-	backbufferAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	backbufferAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+	VmaAllocationCreateInfo backbufferAllocInfos{};
+	backbufferAllocInfos.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	backbufferAllocInfos.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
 	VK_CHECK(vmaCreateImage(
 		m_pImpl->allocator,
-		&backbufferInfo,
-		&backbufferAllocInfo,
+		&backbufferInfos,
+		&backbufferAllocInfos,
 		&m_pImpl->backbuffer.image,
 		&m_pImpl->backbuffer.allocation,
 		nullptr
 	));
 
-	VkImageViewCreateInfo backbufferViewInfo{};
-	backbufferViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	backbufferViewInfo.image = m_pImpl->backbuffer.image;
-	backbufferViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	backbufferViewInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	backbufferViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	backbufferViewInfo.subresourceRange.baseMipLevel = 0;
-	backbufferViewInfo.subresourceRange.levelCount = 1;
-	backbufferViewInfo.subresourceRange.baseArrayLayer = 0;
-	backbufferViewInfo.subresourceRange.layerCount = 1;
+	VkImageViewCreateInfo backbufferViewInfos{};
+	backbufferViewInfos.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	backbufferViewInfos.image = m_pImpl->backbuffer.image;
+	backbufferViewInfos.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	backbufferViewInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backbufferViewInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	backbufferViewInfos.subresourceRange.baseMipLevel = 0;
+	backbufferViewInfos.subresourceRange.levelCount = 1;
+	backbufferViewInfos.subresourceRange.baseArrayLayer = 0;
+	backbufferViewInfos.subresourceRange.layerCount = 1;
 
 	VK_CHECK(vkCreateImageView(
 		m_pImpl->device,
-		&backbufferViewInfo,
+		&backbufferViewInfos,
 		nullptr,
 		&m_pImpl->backbuffer.imageView
 	));
 
-	//DepthBuffer
-	VkImageCreateInfo depthbufferInfo{};
-	depthbufferInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	depthbufferInfo.imageType = VK_IMAGE_TYPE_2D;
-	depthbufferInfo.format = VK_FORMAT_D32_SFLOAT;
-	depthbufferInfo.extent = { extent.width, extent.height, 1 };
-	depthbufferInfo.mipLevels = 1;
-	depthbufferInfo.arrayLayers = 1;
-	depthbufferInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	depthbufferInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	depthbufferInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	//Depthbuffer > Stores the depth (distance from camera) of each rendered fragment
+	// When two triangles overlap, the depth buffer determines which one is in front.
+	// Unlike the backbuffer, it is never presented, only used internally by the GPU during rendering.
+	VkImageCreateInfo depthbufferInfos{};
+	depthbufferInfos.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	depthbufferInfos.imageType = VK_IMAGE_TYPE_2D;
+	depthbufferInfos.format = VK_FORMAT_D32_SFLOAT;
+	depthbufferInfos.extent = { extent.width, extent.height, 1 };
+	depthbufferInfos.mipLevels = 1;
+	depthbufferInfos.arrayLayers = 1;
+	depthbufferInfos.samples = VK_SAMPLE_COUNT_1_BIT;
+	depthbufferInfos.tiling = VK_IMAGE_TILING_OPTIMAL;
+	depthbufferInfos.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	VmaAllocationCreateInfo depthAllocInfo{};
-	depthAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	depthAllocInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+	VmaAllocationCreateInfo depthAllocInfos{};
+	depthAllocInfos.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+	depthAllocInfos.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
 	VK_CHECK(vmaCreateImage(
 		m_pImpl->allocator,
-		&depthbufferInfo,
-		&depthAllocInfo,
+		&depthbufferInfos,
+		&depthAllocInfos,
 		&m_pImpl->depthbuffer.image,
 		&m_pImpl->depthbuffer.allocation,
 		nullptr
 	));
 
-	VkImageViewCreateInfo depthViewInfo{};
-	depthViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	depthViewInfo.image = m_pImpl->depthbuffer.image;
-	depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	depthViewInfo.format = VK_FORMAT_D32_SFLOAT;
-	depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	depthViewInfo.subresourceRange.baseMipLevel = 0;
-	depthViewInfo.subresourceRange.levelCount = 1;
-	depthViewInfo.subresourceRange.baseArrayLayer = 0;
-	depthViewInfo.subresourceRange.layerCount = 1;
+	VkImageViewCreateInfo depthViewInfos{};
+	depthViewInfos.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	depthViewInfos.image = m_pImpl->depthbuffer.image;
+	depthViewInfos.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	depthViewInfos.format = VK_FORMAT_D32_SFLOAT;
+	depthViewInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	depthViewInfos.subresourceRange.baseMipLevel = 0;
+	depthViewInfos.subresourceRange.levelCount = 1;
+	depthViewInfos.subresourceRange.baseArrayLayer = 0;
+	depthViewInfos.subresourceRange.layerCount = 1;
 
 	VK_CHECK(vkCreateImageView(
 		m_pImpl->device,
-		&depthViewInfo,
+		&depthViewInfos,
 		nullptr,
 		&m_pImpl->depthbuffer.imageView
 	));
@@ -442,9 +515,17 @@ void GraphicsContext::InitFrameData()
 	// Pre-allocate one CommandBuffer and two semaphores per frame in flight
 	for (auto& frame : m_pImpl->frames)
 	{
-		frame.commandBuffer = &m_pImpl->commandPool->Aquire();
+		frame.commandBuffer = &m_pImpl->commandPool->Acquire();
 
 		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isImageAvailable));
 		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isRenderFinished));
 	}
+}
+
+void GraphicsContext::InitPipeline()
+{
+	// Assign each shader to pipeline
+	m_pImpl->vertexShader = std::make_unique<Shader>(*this, "shaders/basic.vert.spv", ShaderStage::Vertex);
+	m_pImpl->fragmentShader = std::make_unique<Shader>(*this, "shaders/basic.frag.spv", ShaderStage::Fragment);
+	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader);
 }

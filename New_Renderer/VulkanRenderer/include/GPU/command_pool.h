@@ -12,7 +12,7 @@ public:
 	explicit CommandPool(GraphicsContext& ctx);
 	~CommandPool();
 
-	CommandBuffer& Aquire();
+	CommandBuffer& Acquire();
 	void Release(CommandBuffer& cb);
 
 	CommandPool(const CommandPool&) = delete;

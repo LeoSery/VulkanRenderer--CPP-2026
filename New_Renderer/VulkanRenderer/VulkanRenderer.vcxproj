@@ -165,6 +165,8 @@
     <ClCompile Include="src\Core\window.cpp" />
     <ClCompile Include="src\GPU\command_buffer.cpp" />
     <ClCompile Include="src\GPU\command_pool.cpp" />
+    <ClCompile Include="src\GPU\pipeline.cpp" />
+    <ClCompile Include="src\GPU\shader.cpp" />
     <ClCompile Include="vma_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -173,7 +175,13 @@
     <ClInclude Include="include\GPU\command_buffer.h" />
     <ClInclude Include="include\GPU\command_pool.h" />
     <ClInclude Include="include\GPU\Image.h" />
+    <ClInclude Include="include\GPU\pipeline.h" />
+    <ClInclude Include="include\GPU\shader.h" />
     <ClInclude Include="include\Utils\VkCheck.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\basic.frag" />
+    <None Include="shaders\basic.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

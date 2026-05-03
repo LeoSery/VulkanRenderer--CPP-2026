@@ -44,8 +44,8 @@ struct GraphicsContext::Impl
 	VkExtent2D swapchainExtent{};
 
 	// Render targets
-	Image backbuffer;
-	Image depthbuffer;
+	std::unique_ptr<Image> backbuffer;
+	std::unique_ptr<Image> depthbuffer;
 
 	// Pool and FrameData
 	std::unique_ptr<CommandPool> commandPool;
@@ -76,8 +76,12 @@ GraphicsContext::~GraphicsContext()
 {
 	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
 
+	m_pImpl->pipeline.reset();
+	m_pImpl->vertexShader.reset();
+	m_pImpl->fragmentShader.reset();
+
 	// Destroy in reverse order of construction :
-	// Encoders > Semaphores > CommandPool > Backbuffer > Depthbuffer > SwapchainImageViews > Swapchain > Allocator > Device > Surface > Instance
+	// Encoders > Semaphores > CommandPool > SwapchainImageViews > Swapchain > Allocator > Device > Surface > Instance
 
 	// Encoders
 	for (auto& encoder : m_pImpl->encoders)
@@ -95,13 +99,9 @@ GraphicsContext::~GraphicsContext()
 	// CommandPool
 	m_pImpl->commandPool.reset();
 
-	// BackBuffer
-	vkDestroyImageView(m_pImpl->device, m_pImpl->backbuffer.imageView, nullptr);
-	vmaDestroyImage(m_pImpl->allocator, m_pImpl->backbuffer.image, m_pImpl->backbuffer.allocation);
-
-	// DepthBuffer
-	vkDestroyImageView(m_pImpl->device, m_pImpl->depthbuffer.imageView, nullptr);
-	vmaDestroyImage(m_pImpl->allocator, m_pImpl->depthbuffer.image, m_pImpl->depthbuffer.allocation);
+	// Image
+	m_pImpl->backbuffer.reset();
+	m_pImpl->depthbuffer.reset();
 
 	// ImageViews
 	for (auto& view : m_pImpl->swapchainImageViews)
@@ -143,7 +143,7 @@ void GraphicsContext::BeginFrame()
 
 	// Transition backbuffer layout to COLOR_ATTACHMENT - tells the GPU we are going to draw into it
 	encoder->TransitionImageLayout(
-		m_pImpl->backbuffer.image,
+		m_pImpl->backbuffer->GetVkImage(),
 		VK_IMAGE_LAYOUT_UNDEFINED,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	);
@@ -155,7 +155,7 @@ void GraphicsContext::BeginFrame()
 	// Describe the color attachment > Which image to draw into, how to load and store it
 	VkRenderingAttachmentInfo colorAttachementInfos{};
 	colorAttachementInfos.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-	colorAttachementInfos.imageView = m_pImpl->backbuffer.imageView;
+	colorAttachementInfos.imageView = m_pImpl->backbuffer->GetVkImageView();
 	colorAttachementInfos.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 	colorAttachementInfos.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachementInfos.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -199,8 +199,8 @@ void GraphicsContext::EndFrame()
 
 	// Transition backbuffer layout to TransferSrc so it can be used as blit source
 	encoder->TransitionImageLayout(
-		m_pImpl->backbuffer.image,
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		m_pImpl->backbuffer->GetVkImage(),
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
 	);
 
@@ -212,7 +212,7 @@ void GraphicsContext::EndFrame()
 
 	// Blit (copy + format conversion) backbuffer HDR to swapchain SDR/LDR
 	encoder->BlitImage(
-		m_pImpl->backbuffer.image,
+		m_pImpl->backbuffer->GetVkImage(),
 		swapchainImage,
 		m_pImpl->swapchainExtent,
 		m_pImpl->swapchainExtent
@@ -283,6 +283,21 @@ VkPipeline GraphicsContext::GetPipeline() const
 uint32_t GraphicsContext::GetGraphicsQueueFamily() const
 {
 	return m_pImpl->graphicsQueueFamily;
+}
+
+VmaAllocator GraphicsContext::GetAllocator() const
+{
+	return m_pImpl->allocator;
+}
+
+CommandPool& GraphicsContext::GetCommandPool() const
+{
+	return *m_pImpl->commandPool;
+}
+
+VkQueue GraphicsContext::GetGraphicsQueue() const
+{
+	return m_pImpl->graphicsQueue;
 }
 
 void GraphicsContext::InitInstance()
@@ -414,95 +429,24 @@ void GraphicsContext::InitImages()
 	// We render into this image instead of directly into the swapchain.
 	// Once rendering is done, we blit (Copy) it to the swapchain image for presentation (Show).
 	// Using an intermediate buffer allows us to render at a different resolution than the swapchain, and to use HDR formats the swapchain may not support.
-	VkImageCreateInfo backbufferInfos{};
-	backbufferInfos.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	backbufferInfos.imageType = VK_IMAGE_TYPE_2D;
-	backbufferInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	backbufferInfos.extent = { extent.width, extent.height, 1 };
-	backbufferInfos.mipLevels = 1;
-	backbufferInfos.arrayLayers = 1;
-	backbufferInfos.samples = VK_SAMPLE_COUNT_1_BIT;
-	backbufferInfos.tiling = VK_IMAGE_TILING_OPTIMAL;
-	backbufferInfos.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-		| VK_IMAGE_USAGE_TRANSFER_DST_BIT
-		| VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-		| VK_IMAGE_USAGE_STORAGE_BIT;
-
-	VmaAllocationCreateInfo backbufferAllocInfos{};
-	backbufferAllocInfos.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	backbufferAllocInfos.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-	VK_CHECK(vmaCreateImage(
-		m_pImpl->allocator,
-		&backbufferInfos,
-		&backbufferAllocInfos,
-		&m_pImpl->backbuffer.image,
-		&m_pImpl->backbuffer.allocation,
-		nullptr
-	));
-
-	VkImageViewCreateInfo backbufferViewInfos{};
-	backbufferViewInfos.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	backbufferViewInfos.image = m_pImpl->backbuffer.image;
-	backbufferViewInfos.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	backbufferViewInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-	backbufferViewInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	backbufferViewInfos.subresourceRange.baseMipLevel = 0;
-	backbufferViewInfos.subresourceRange.levelCount = 1;
-	backbufferViewInfos.subresourceRange.baseArrayLayer = 0;
-	backbufferViewInfos.subresourceRange.layerCount = 1;
-
-	VK_CHECK(vkCreateImageView(
-		m_pImpl->device,
-		&backbufferViewInfos,
-		nullptr,
-		&m_pImpl->backbuffer.imageView
-	));
+	Image::CreateInfos backBufferCreateInfos{};
+	backBufferCreateInfos.width = extent.width;
+	backBufferCreateInfos.height = extent.height;
+	backBufferCreateInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backBufferCreateInfos.usage = Image::E_Usage::ColorAttachment | Image::E_Usage::TransferSrc | Image::E_Usage::TransferDst | Image::E_Usage::Storage;
+	backBufferCreateInfos.genMips = false;
+	m_pImpl->backbuffer = std::make_unique<Image>(*this, backBufferCreateInfos);
 
 	//Depthbuffer > Stores the depth (distance from camera) of each rendered fragment
 	// When two triangles overlap, the depth buffer determines which one is in front.
 	// Unlike the backbuffer, it is never presented, only used internally by the GPU during rendering.
-	VkImageCreateInfo depthbufferInfos{};
-	depthbufferInfos.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	depthbufferInfos.imageType = VK_IMAGE_TYPE_2D;
-	depthbufferInfos.format = VK_FORMAT_D32_SFLOAT;
-	depthbufferInfos.extent = { extent.width, extent.height, 1 };
-	depthbufferInfos.mipLevels = 1;
-	depthbufferInfos.arrayLayers = 1;
-	depthbufferInfos.samples = VK_SAMPLE_COUNT_1_BIT;
-	depthbufferInfos.tiling = VK_IMAGE_TILING_OPTIMAL;
-	depthbufferInfos.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-	VmaAllocationCreateInfo depthAllocInfos{};
-	depthAllocInfos.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-	depthAllocInfos.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-	VK_CHECK(vmaCreateImage(
-		m_pImpl->allocator,
-		&depthbufferInfos,
-		&depthAllocInfos,
-		&m_pImpl->depthbuffer.image,
-		&m_pImpl->depthbuffer.allocation,
-		nullptr
-	));
-
-	VkImageViewCreateInfo depthViewInfos{};
-	depthViewInfos.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	depthViewInfos.image = m_pImpl->depthbuffer.image;
-	depthViewInfos.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	depthViewInfos.format = VK_FORMAT_D32_SFLOAT;
-	depthViewInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	depthViewInfos.subresourceRange.baseMipLevel = 0;
-	depthViewInfos.subresourceRange.levelCount = 1;
-	depthViewInfos.subresourceRange.baseArrayLayer = 0;
-	depthViewInfos.subresourceRange.layerCount = 1;
-
-	VK_CHECK(vkCreateImageView(
-		m_pImpl->device,
-		&depthViewInfos,
-		nullptr,
-		&m_pImpl->depthbuffer.imageView
-	));
+	Image::CreateInfos depthBufferCreateInfos{};
+	depthBufferCreateInfos.width = extent.width;
+	depthBufferCreateInfos.height = extent.height;
+	depthBufferCreateInfos.format = VK_FORMAT_D32_SFLOAT;
+	depthBufferCreateInfos.usage = Image::E_Usage::DepthAttachement;
+	depthBufferCreateInfos.genMips = false;
+	m_pImpl->depthbuffer = std::make_unique<Image>(*this, depthBufferCreateInfos);
 }
 
 void GraphicsContext::InitFrameData()

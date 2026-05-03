@@ -63,6 +63,12 @@
     <ClCompile Include="src\GPU\pipeline.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
+    <ClCompile Include="src\GPU\buffer.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="include\GPU\Image.cpp">
+      <Filter>Fichiers sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Core\window.h">
@@ -87,6 +93,9 @@
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
     <ClInclude Include="include\GPU\pipeline.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\buffer.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
   </ItemGroup>

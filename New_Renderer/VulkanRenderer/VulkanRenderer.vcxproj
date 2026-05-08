@@ -160,15 +160,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="include\GPU\Image.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Core\graphics_context.cpp" />
     <ClCompile Include="src\Core\window.cpp" />
     <ClCompile Include="src\GPU\buffer.cpp" />
     <ClCompile Include="src\GPU\command_buffer.cpp" />
     <ClCompile Include="src\GPU\command_pool.cpp" />
+    <ClCompile Include="src\GPU\descriptor_pool.cpp" />
+    <ClCompile Include="src\GPU\descriptor_set.cpp" />
+    <ClCompile Include="src\GPU\Image.cpp" />
     <ClCompile Include="src\GPU\pipeline.cpp" />
+    <ClCompile Include="src\GPU\sampler.cpp" />
     <ClCompile Include="src\GPU\shader.cpp" />
+    <ClCompile Include="src\GPU\persistent_staging_buffer.h.cpp" />
     <ClCompile Include="vma_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -177,9 +181,13 @@
     <ClInclude Include="include\GPU\buffer.h" />
     <ClInclude Include="include\GPU\command_buffer.h" />
     <ClInclude Include="include\GPU\command_pool.h" />
+    <ClInclude Include="include\GPU\descriptor_pool.h" />
+    <ClInclude Include="include\GPU\descriptor_set.h" />
     <ClInclude Include="include\GPU\Image.h" />
     <ClInclude Include="include\GPU\pipeline.h" />
+    <ClInclude Include="include\GPU\sampler.h" />
     <ClInclude Include="include\GPU\shader.h" />
+    <ClInclude Include="include\GPU\persistent_staging_buffer.h" />
     <ClInclude Include="include\Utils\VkCheck.h" />
   </ItemGroup>
   <ItemGroup>

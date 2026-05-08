@@ -6,11 +6,12 @@
 
 class GraphicsContext;
 class Shader;
+class DescriptorSet;
 
 class Pipeline
 {
 public:
-	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader);
+	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet);
 	~Pipeline();
 
 	Pipeline(const Pipeline&) = delete;

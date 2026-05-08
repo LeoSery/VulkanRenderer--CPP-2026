@@ -6,6 +6,11 @@
 #include "Utils/VkCheck.h"
 #include "GPU/shader.h"
 #include "GPU/pipeline.h"
+#include "GPU/sampler.h"
+#include "GPU/descriptor_pool.h"
+#include "GPU/descriptor_set.h"
+#include "GPU/Buffer.h"
+#include "GPU/persistent_staging_buffer.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -15,6 +20,7 @@
 #include <array>
 #include <vector>
 #include <stdexcept>
+#include <memory>
 
 struct FrameData
 {
@@ -39,8 +45,7 @@ struct GraphicsContext::Impl
 
 	// Swapchain
 	vkb::Swapchain vkbSwapchain;
-	std::vector<VkImage> swapchainImages;
-	std::vector<VkImageView> swapchainImageViews;
+	std::vector<std::unique_ptr<Image>> swapchainImages;
 	VkExtent2D swapchainExtent{};
 
 	// Render targets
@@ -54,10 +59,20 @@ struct GraphicsContext::Impl
 	uint32_t currentFrame = 0;
 	uint32_t swapchainImageIndex = 0;
 
-	//Pipeline
+	// Pipeline
 	std::unique_ptr<Shader> vertexShader;
 	std::unique_ptr<Shader> fragmentShader;
 	std::unique_ptr<Pipeline> pipeline;
+
+	// Texture
+	std::unique_ptr<Image> texture;
+	std::unique_ptr<Sampler> sampler;
+	std::unique_ptr<DescriptorPool> descriptorPool;
+	std::unique_ptr<DescriptorSet> descriptorSet;
+	std::unique_ptr<Buffer> indexBuffer;
+
+	// Buffer
+	std::unique_ptr<PersistentStagingBuffer> stagingBuffer;
 };
 	
 GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl>())
@@ -69,12 +84,19 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitSwapchain(window);
 	InitImages();
 	InitFrameData();
+	InitPersistentBuffer();
+	InitTexture();
 	InitPipeline();
 }
 
 GraphicsContext::~GraphicsContext()
 {
 	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
+
+	m_pImpl->descriptorSet.reset();
+	m_pImpl->descriptorPool.reset();
+	m_pImpl->sampler.reset();
+	m_pImpl->texture.reset();
 
 	m_pImpl->pipeline.reset();
 	m_pImpl->vertexShader.reset();
@@ -100,14 +122,13 @@ GraphicsContext::~GraphicsContext()
 	m_pImpl->commandPool.reset();
 
 	// Image
+	m_pImpl->indexBuffer.reset();
 	m_pImpl->backbuffer.reset();
 	m_pImpl->depthbuffer.reset();
+	m_pImpl->stagingBuffer.reset();
 
 	// ImageViews
-	for (auto& view : m_pImpl->swapchainImageViews)
-	{
-		vkDestroyImageView(m_pImpl->device, view, nullptr);
-	}
+	m_pImpl->swapchainImages.clear();
 
 	// Swapchain
 	vkb::destroy_swapchain(m_pImpl->vkbSwapchain);
@@ -143,7 +164,7 @@ void GraphicsContext::BeginFrame()
 
 	// Transition backbuffer layout to COLOR_ATTACHMENT - tells the GPU we are going to draw into it
 	encoder->TransitionImageLayout(
-		m_pImpl->backbuffer->GetVkImage(),
+		*m_pImpl->backbuffer,
 		VK_IMAGE_LAYOUT_UNDEFINED,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	);
@@ -186,20 +207,25 @@ void GraphicsContext::BeginFrame()
 
 	// Bind the graphics pipeline > Defines shaders and render states for the following draw calls
 	vkCmdBindPipeline(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetPipeline());
-	vkCmdDraw(frame.commandBuffer->GetCmd(), 3, 1, 0, 0); // "3, 1, 0, 0" > 3 Vertices, 1 instance, 0 is for first vertex, 0 is for first instance
+	
+	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
+	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
+	
+	vkCmdBindIndexBuffer(frame.commandBuffer->GetCmd(), m_pImpl->indexBuffer->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(frame.commandBuffer->GetCmd(), 6, 1, 0, 0, 0);
 
 	vkCmdEndRendering(frame.commandBuffer->GetCmd());
 }
 
 void GraphicsContext::EndFrame()
 {
-	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
-	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
-	auto swapchainImage = m_pImpl->swapchainImages[m_pImpl->swapchainImageIndex];
+	FrameData& frame = m_pImpl->frames[m_pImpl->currentFrame];
+	std::unique_ptr<CommandEncoder>& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
+	Image& swapchainImage = *m_pImpl->swapchainImages[m_pImpl->swapchainImageIndex];
 
 	// Transition backbuffer layout to TransferSrc so it can be used as blit source
 	encoder->TransitionImageLayout(
-		m_pImpl->backbuffer->GetVkImage(),
+		*m_pImpl->backbuffer,
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
 	);
@@ -212,7 +238,7 @@ void GraphicsContext::EndFrame()
 
 	// Blit (copy + format conversion) backbuffer HDR to swapchain SDR/LDR
 	encoder->BlitImage(
-		m_pImpl->backbuffer->GetVkImage(),
+		*m_pImpl->backbuffer,
 		swapchainImage,
 		m_pImpl->swapchainExtent,
 		m_pImpl->swapchainExtent
@@ -275,6 +301,11 @@ VkDevice GraphicsContext::GetDevice() const
 	return m_pImpl->device;
 }
 
+VkPhysicalDevice GraphicsContext::GetPhysicalDevice() const
+{
+	return m_pImpl->physicalDevice;
+}
+
 VkPipeline GraphicsContext::GetPipeline() const
 {
 	return m_pImpl->pipeline->GetPipeline();
@@ -298,6 +329,11 @@ CommandPool& GraphicsContext::GetCommandPool() const
 VkQueue GraphicsContext::GetGraphicsQueue() const
 {
 	return m_pImpl->graphicsQueue;
+}
+
+PersistentStagingBuffer& GraphicsContext::GetPersistentStagingBuffer() const
+{
+	return *m_pImpl->stagingBuffer;
 }
 
 void GraphicsContext::InitInstance()
@@ -378,6 +414,11 @@ void GraphicsContext::InitDevice()
 	m_pImpl->graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 }
 
+void GraphicsContext::InitPersistentBuffer()
+{
+	m_pImpl->stagingBuffer = std::make_unique<PersistentStagingBuffer>(*this);
+}
+
 void GraphicsContext::InitAllocator()
 {
 	VmaAllocatorCreateInfo allocatorInfos{};
@@ -416,16 +457,23 @@ void GraphicsContext::InitSwapchain(Window& window)
 	}
 
 	m_pImpl->vkbSwapchain = result.value();
-	m_pImpl->swapchainImages = m_pImpl->vkbSwapchain.get_images().value();
-	m_pImpl->swapchainImageViews = m_pImpl->vkbSwapchain.get_image_views().value();
 	m_pImpl->swapchainExtent = m_pImpl->vkbSwapchain.extent;
+
+	std::vector<VkImage> vkImages = m_pImpl->vkbSwapchain.get_images().value();
+	std::vector<VkImageView> vkImageViews = m_pImpl->vkbSwapchain.get_image_views().value();
+	VkFormat format = m_pImpl->vkbSwapchain.image_format;
+
+	for (size_t i = 0; i < vkImages.size(); i++)
+	{
+		m_pImpl->swapchainImages.push_back(std::make_unique<Image>(*this, vkImages[i], vkImageViews[i], format, m_pImpl->swapchainExtent.width, m_pImpl->swapchainExtent.height));
+	}
 }
 
 void GraphicsContext::InitImages()
 {
 	VkExtent2D extent = m_pImpl->swapchainExtent;
 
-	//Backbuffer > Intermediate render target
+	// Backbuffer > Intermediate render target
 	// We render into this image instead of directly into the swapchain.
 	// Once rendering is done, we blit (Copy) it to the swapchain image for presentation (Show).
 	// Using an intermediate buffer allows us to render at a different resolution than the swapchain, and to use HDR formats the swapchain may not support.
@@ -437,7 +485,7 @@ void GraphicsContext::InitImages()
 	backBufferCreateInfos.genMips = false;
 	m_pImpl->backbuffer = std::make_unique<Image>(*this, backBufferCreateInfos);
 
-	//Depthbuffer > Stores the depth (distance from camera) of each rendered fragment
+	// Depthbuffer > Stores the depth (distance from camera) of each rendered fragment
 	// When two triangles overlap, the depth buffer determines which one is in front.
 	// Unlike the backbuffer, it is never presented, only used internally by the GPU during rendering.
 	Image::CreateInfos depthBufferCreateInfos{};
@@ -471,5 +519,58 @@ void GraphicsContext::InitPipeline()
 	// Assign each shader to pipeline
 	m_pImpl->vertexShader = std::make_unique<Shader>(*this, "shaders/basic.vert.spv", ShaderStage::Vertex);
 	m_pImpl->fragmentShader = std::make_unique<Shader>(*this, "shaders/basic.frag.spv", ShaderStage::Fragment);
-	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader);
+	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader, *m_pImpl->descriptorSet);
+}
+
+void GraphicsContext::InitTexture()
+{
+	// Generate a 64x64 checkerboard in RGBA
+	constexpr uint32_t size = 64;
+	std::vector<uint8_t> pixels(size * size * 4);
+
+	for (uint32_t y = 0; y < size; y++)
+	{
+		for (uint32_t x = 0; x < size; x++)
+		{
+			uint32_t idx = (y * size + x) * 4;
+			bool white = ((x / 8) + (y / 8)) % 2 == 0;
+			pixels[idx + 0] = white ? 255 : 0;   // R
+			pixels[idx + 1] = white ? 255 : 0;   // G
+			pixels[idx + 2] = white ? 255 : 0;   // B
+			pixels[idx + 3] = 255;               // A
+		}
+	}
+
+	// Create Image
+	Image::CreateInfos imageCreateInfos{};
+	imageCreateInfos.width = size;
+	imageCreateInfos.height = size;
+	imageCreateInfos.format = VK_FORMAT_R8G8B8A8_SRGB;
+	imageCreateInfos.usage = Image::E_Usage::TransferDst | Image::E_Usage::Sampled;
+	imageCreateInfos.genMips = true;
+
+	m_pImpl->texture = std::make_unique<Image>(*this, imageCreateInfos);
+	m_pImpl->texture->Upload(pixels.data(), size, size);
+
+	// Create sampler
+	Sampler::CreateInfos samplerInfos{};
+	m_pImpl->sampler = std::make_unique<Sampler>(*this, samplerInfos);
+
+	// Create DescriptorPool
+	DescriptorPool::CreateInfos descriptorPoolCreateInfos{};
+	m_pImpl->descriptorPool = std::make_unique<DescriptorPool>(*this, descriptorPoolCreateInfos);
+
+	// Create DescriptorSet
+	DescriptorSet::CreateInfos descriptorSetCreateInfos{};
+	descriptorSetCreateInfos.pool = m_pImpl->descriptorPool.get();
+
+	m_pImpl->descriptorSet = std::make_unique<DescriptorSet>(*this, descriptorSetCreateInfos);
+	m_pImpl->descriptorSet->Bind<Image>(0, *m_pImpl->texture, m_pImpl->sampler.get());
+
+	uint32_t indices[] = { 0, 1, 2, 0, 2, 3 };
+	Buffer::CreateInfo indexCI{};
+	indexCI.sizeInBytes = sizeof(indices);
+	indexCI.usage = Buffer::E_Usage::IndexBuffer | Buffer::E_Usage::TransferDst;
+	m_pImpl->indexBuffer = std::make_unique<Buffer>(*this, indexCI);
+	m_pImpl->indexBuffer->Upload(indices, sizeof(indices));
 }

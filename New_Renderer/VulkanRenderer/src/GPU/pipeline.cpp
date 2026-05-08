@@ -2,6 +2,7 @@
 #include "GPU/shader.h"
 #include "Core/graphics_context.h"
 #include "Utils/VkCheck.h"
+#include "GPU/Descriptor_set.h"
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
@@ -13,12 +14,16 @@ struct Pipeline::Impl
 	VkPipeline pipeline = VK_NULL_HANDLE;
 };
 
-Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader) : m_pImpl(std::make_unique<Impl>())
+Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet) : m_pImpl(std::make_unique<Impl>())
 {
 	m_pImpl->device = ctx.GetDevice();
 
+	VkDescriptorSetLayout descriptorSetLayout = descriptorSet.GetVkDescriptorSetLayout();
+
 	VkPipelineLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layoutInfo.setLayoutCount = 1;
+	layoutInfo.pSetLayouts = &descriptorSetLayout;
 	VK_CHECK(vkCreatePipelineLayout(m_pImpl->device, &layoutInfo, nullptr, &m_pImpl->layout));
 
 	VkPipelineShaderStageCreateInfo shaderStagesInfos[2]{};

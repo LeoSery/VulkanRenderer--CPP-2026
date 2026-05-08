@@ -66,8 +66,20 @@
     <ClCompile Include="src\GPU\buffer.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
-    <ClCompile Include="include\GPU\Image.cpp">
-      <Filter>Fichiers sources</Filter>
+    <ClCompile Include="src\GPU\sampler.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\Image.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\descriptor_pool.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\descriptor_set.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GPU\persistent_staging_buffer.h.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -79,9 +91,6 @@
     </ClInclude>
     <ClInclude Include="include\Utils\VkCheck.h">
       <Filter>Fichiers d%27en-tête\Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="include\GPU\Image.h">
-      <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
     <ClInclude Include="include\GPU\command_buffer.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
@@ -96,6 +105,21 @@
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
     <ClInclude Include="include\GPU\buffer.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\sampler.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\Image.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\descriptor_pool.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\descriptor_set.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\persistent_staging_buffer.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
   </ItemGroup>

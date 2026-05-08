@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
+#include <memory>
 
 class GraphicsContext;
 
@@ -58,7 +59,7 @@ private:
 	uint32_t m_height = 0;
 	uint32_t m_mipLevels = 1;
 	VkFormat m_format = VK_FORMAT_UNDEFINED;
-	struct Impl* m_pImpl = nullptr;
+	std::unique_ptr<Impl> m_pImpl;
 };
 
 inline Image::E_Usage operator|(Image::E_Usage a, Image::E_Usage b)

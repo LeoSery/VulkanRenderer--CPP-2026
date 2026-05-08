@@ -1,6 +1,7 @@
 #include "GPU/command_buffer.h"
 #include "GPU/command_pool.h"
 #include "Utils/VkCheck.h"
+#include "GPU/Image.h"
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
@@ -38,7 +39,7 @@ CommandEncoder::~CommandEncoder()
 	}
 }
 
-void CommandEncoder::TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
+void CommandEncoder::TransitionImageLayout(Image& image, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
 	VkImageMemoryBarrier2 barrier{};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -48,7 +49,7 @@ void CommandEncoder::TransitionImageLayout(VkImage image, VkImageLayout oldLayou
 	barrier.dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
 	barrier.oldLayout = oldLayout;
 	barrier.newLayout = newLayout;
-	barrier.image = image;
+	barrier.image = image.GetVkImage();
 	barrier.subresourceRange.aspectMask = (newLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
@@ -63,7 +64,7 @@ void CommandEncoder::TransitionImageLayout(VkImage image, VkImageLayout oldLayou
 	vkCmdPipelineBarrier2(m_pImpl->cmd, &dep);
 }
 
-void CommandEncoder::ClearColor(VkImage image, float r, float g, float b, float a)
+void CommandEncoder::ClearColor(Image& image, float r, float g, float b, float a)
 {
 	VkClearColorValue clearColor = { { r, g, b, a } };
 
@@ -76,7 +77,7 @@ void CommandEncoder::ClearColor(VkImage image, float r, float g, float b, float 
 
 	vkCmdClearColorImage(
 		m_pImpl->cmd,
-		image,
+		image.GetVkImage(),
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		&clearColor,
 		1,
@@ -84,7 +85,7 @@ void CommandEncoder::ClearColor(VkImage image, float r, float g, float b, float 
 	);
 }
 
-void CommandEncoder::BlitImage(VkImage src, VkImage dst, VkExtent2D srcExtent, VkExtent2D dstExtent)
+void CommandEncoder::BlitImage(Image& src, Image& dst, VkExtent2D srcExtent, VkExtent2D dstExtent)
 {
 	VkImageBlit2 blitRegion{};
 	blitRegion.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2;
@@ -97,9 +98,9 @@ void CommandEncoder::BlitImage(VkImage src, VkImage dst, VkExtent2D srcExtent, V
 
 	VkBlitImageInfo2 blitInfo{};
 	blitInfo.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2;
-	blitInfo.srcImage = src;
+	blitInfo.srcImage = src.GetVkImage();
 	blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	blitInfo.dstImage = dst;
+	blitInfo.dstImage = dst.GetVkImage();
 	blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	blitInfo.regionCount = 1;
 	blitInfo.pRegions = &blitRegion;

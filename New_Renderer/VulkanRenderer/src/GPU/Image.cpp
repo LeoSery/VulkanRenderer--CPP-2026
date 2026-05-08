@@ -4,6 +4,7 @@
 #include "GPU/command_pool.h"
 #include "GPU/command_buffer.h"
 #include "Utils/VkCheck.h"
+#include "GPU/persistent_staging_buffer.h"
 
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
@@ -39,7 +40,7 @@ static VkImageUsageFlags ConvertToVkUsage(Image::E_Usage usage)
 	return flags;
 }
 
-static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t baseMipLevel, uint32_t mipLevels)
 {
 	VkImageMemoryBarrier barrierInfos{};
 	barrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -49,7 +50,7 @@ static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImag
 	barrierInfos.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrierInfos.image = image;
 	barrierInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrierInfos.subresourceRange.baseMipLevel = 0;
+	barrierInfos.subresourceRange.baseMipLevel = baseMipLevel;
 	barrierInfos.subresourceRange.levelCount = mipLevels;
 	barrierInfos.subresourceRange.baseArrayLayer = 0;
 	barrierInfos.subresourceRange.layerCount = 1;
@@ -71,6 +72,13 @@ static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImag
 		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	{
+		barrierInfos.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		barrierInfos.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	}
 	else
 	{
 		throw std::runtime_error("Image > TransitionLayout : Transition not supported");
@@ -80,7 +88,7 @@ static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImag
 }
 
 // Constructors & Destructors
-Image::Image(GraphicsContext& ctx, const CreateInfos infos) : m_pImpl(new Impl), m_ctx(&ctx), m_width(infos.width), m_height(infos.height), m_format(infos.format), m_ownsImage(true)
+Image::Image(GraphicsContext& ctx, const CreateInfos infos) : m_pImpl(std::make_unique<Impl>()), m_ctx(&ctx), m_width(infos.width), m_height(infos.height), m_format(infos.format), m_ownsImage(true)
 {
 	m_mipLevels = infos.genMips ? ComputeMipLevels(infos.width, infos.height) : 1;
 
@@ -144,8 +152,6 @@ Image::~Image() noexcept
 	{
 		vkDestroyImageView(m_ctx->GetDevice(), m_pImpl->imageView, nullptr);
 	}
-
-	delete m_pImpl;
 }
 
 void Image::Upload(const void* pixels, uint32_t width, uint32_t height) 
@@ -153,13 +159,8 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 	size_t dataSize = width * height * 4; // 4 bytes per pixels (RGBA)
 
 	// 1. Stagin buffer
-	Buffer::CreateInfo stagingInfos{};
-	stagingInfos.sizeInBytes = dataSize;
-	stagingInfos.usage = Buffer::E_Usage::TransferSrc;
-	Buffer stagingBuffer(*m_ctx, stagingInfos);
-
-	void* mapedData = stagingBuffer.GetMappedData();
-	std::memcpy(mapedData, pixels, dataSize);
+	StagingBufferHandle stagingBufferHandle = m_ctx->GetPersistentStagingBuffer().Acquire(dataSize);
+	std::memcpy(stagingBufferHandle.GetMappedData(), pixels, dataSize);
 
 	// 2. CommandBuffer
 	CommandBuffer* commandBuffer = &m_ctx->GetCommandPool().Acquire();
@@ -170,7 +171,7 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 	vkBeginCommandBuffer(commandBuffer->GetCmd(), &beginInfos);
 
 	// 3. Transition Vulkant to submit image (UNDEFINED > TRANSFERT_DST) for all mipmaps
-	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_mipLevels);
+	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0, m_mipLevels);
 
 	// 4. Copy staging buffer
 	VkBufferImageCopy regionInfos{};
@@ -183,7 +184,7 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 	regionInfos.imageOffset = { 0, 0, 0 };
 	regionInfos.imageExtent = { width, height, 1 };
 
-	vkCmdCopyBufferToImage(commandBuffer->GetCmd(), stagingBuffer.GetVkBuffer(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &regionInfos);
+	vkCmdCopyBufferToImage(commandBuffer->GetCmd(), stagingBufferHandle.GetVkBuffer(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &regionInfos);
 
 	// 5. Blit chain > mipmaps generation
 	int32_t mipWidth = static_cast<int32_t>(width);
@@ -228,7 +229,8 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 		if (mipHeight > 1) mipHeight /= 2;
 	}
 
-	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mipLevels);
+	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, m_mipLevels - 1);
+	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mipLevels - 1, 1);
 
 	vkEndCommandBuffer(commandBuffer->GetCmd());
 

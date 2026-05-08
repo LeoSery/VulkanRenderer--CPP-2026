@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <vulkan/vulkan.h>
 
 class GraphicsContext;
@@ -41,7 +42,7 @@ private:
 	size_t m_size = 0;
 	E_Usage m_usage = E_Usage::VertexBuffer;
 	GraphicsContext* m_ctx = nullptr;
-	struct Impl* m_pImpl = nullptr;
+	std::unique_ptr<Impl> m_pImpl;
 };
 
 inline Buffer::E_Usage operator|(Buffer::E_Usage a, Buffer::E_Usage b)

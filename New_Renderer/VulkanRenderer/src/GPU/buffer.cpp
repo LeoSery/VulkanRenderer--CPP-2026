@@ -3,6 +3,7 @@
 #include "GPU/command_pool.h"
 #include "GPU/command_buffer.h"
 #include "Utils/VkCheck.h"
+#include "GPU/persistent_staging_buffer.h"
 
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
@@ -29,7 +30,7 @@ static VkBufferUsageFlags ConvertToVkUsage(Buffer::E_Usage usage)
 	return flags;
 }
 
-Buffer::Buffer(GraphicsContext& ctx, const CreateInfo& infos) : m_pImpl(new Buffer::Impl), m_ctx(&ctx), m_size(infos.sizeInBytes), m_usage(infos.usage)
+Buffer::Buffer(GraphicsContext& ctx, const CreateInfo& infos) : m_pImpl(std::make_unique<Impl>()), m_ctx(&ctx), m_size(infos.sizeInBytes), m_usage(infos.usage)
 {
 	VkBufferCreateInfo bufferInfos{};
 	bufferInfos.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -52,7 +53,6 @@ Buffer::Buffer(GraphicsContext& ctx, const CreateInfo& infos) : m_pImpl(new Buff
 Buffer::~Buffer() noexcept
 {
 	vmaDestroyBuffer(m_ctx->GetAllocator(), m_pImpl->buffer, m_pImpl->allocation);
-	delete m_pImpl;
 }
 
 void Buffer::Upload(const void* data, size_t size)
@@ -67,15 +67,8 @@ void Buffer::Upload(const void* data, size_t size)
 	}
 
 	// Else if the buffer is device-local buffer (CPU-Unreadable, blit of the buffer)
-	// 1. Create Buffer
-	Buffer::CreateInfo stagingInfos{};
-	stagingInfos.sizeInBytes = size;
-	stagingInfos.usage = E_Usage::TransferSrc;
-	Buffer stagingBuffer(*m_ctx, stagingInfos);
-
-	// 2. Copy the data to the staging area
-	void* mappedData = stagingBuffer.m_pImpl->allocationInfos.pMappedData;
-	std::memcpy(mappedData, data, size);
+	StagingBufferHandle stagingBufferHandle = m_ctx->GetPersistentStagingBuffer().Acquire(size);
+	std::memcpy(stagingBufferHandle.GetMappedData(), data, size);
 
 	// 3. Save the copy command
 	CommandBuffer* cmdBuffer = &m_ctx->GetCommandPool().Acquire();
@@ -89,7 +82,7 @@ void Buffer::Upload(const void* data, size_t size)
 	copyRegion.srcOffset = 0;
 	copyRegion.dstOffset = 0;
 	copyRegion.size = size;
-	vkCmdCopyBuffer(cmdBuffer->GetCmd(), stagingBuffer.m_pImpl->buffer, m_pImpl->buffer, 1, &copyRegion);
+	vkCmdCopyBuffer(cmdBuffer->GetCmd(), stagingBufferHandle.GetVkBuffer(), m_pImpl->buffer, 1, &copyRegion);
 
 	vkEndCommandBuffer(cmdBuffer->GetCmd());
 

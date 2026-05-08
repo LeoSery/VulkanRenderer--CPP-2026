@@ -4,15 +4,16 @@
 #include <vulkan/vulkan.h>
 
 class CommandPool;
+class Image;
 
 class CommandEncoder
 {
 public:
 	~CommandEncoder();
 
-	void TransitionImageLayout(VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
-	void ClearColor(VkImage image, float r, float g, float b, float a = 1.0f);
-	void BlitImage(VkImage src, VkImage dst, VkExtent2D srcExtent, VkExtent2D dstExtent);
+	void TransitionImageLayout(Image& image, VkImageLayout oldLayout, VkImageLayout newLayout);
+	void ClearColor(Image& image, float r, float g, float b, float a = 1.0f);
+	void BlitImage(Image& src, Image& dst, VkExtent2D srcExtent, VkExtent2D dstExtent);
 
 	CommandEncoder(const CommandEncoder&) = delete;
 	CommandEncoder& operator= (const CommandEncoder&) = delete;

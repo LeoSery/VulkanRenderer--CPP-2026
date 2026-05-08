@@ -40,10 +40,10 @@ static VkImageUsageFlags ConvertToVkUsage(Image::E_Usage usage)
 	return flags;
 }
 
-static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t baseMipLevel, uint32_t mipLevels)
+static void TransitionLayout(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t baseMipLevel, uint32_t mipLevels)
 {
-	VkImageMemoryBarrier barrierInfos{};
-	barrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	VkImageMemoryBarrier2 barrierInfos{};
+	barrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
 	barrierInfos.oldLayout = oldLayout;
 	barrierInfos.newLayout = newLayout;
 	barrierInfos.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -55,36 +55,38 @@ static void TransitionLayout(VkCommandBuffer commadBuffer, VkImage image, VkImag
 	barrierInfos.subresourceRange.baseArrayLayer = 0;
 	barrierInfos.subresourceRange.layerCount = 1;
 
-	VkPipelineStageFlags srcStage = 0;
-	VkPipelineStageFlags dstStage = 0;
-
 	if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 	{
+		barrierInfos.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
 		barrierInfos.srcAccessMask = 0;
-		barrierInfos.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-		dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		barrierInfos.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		barrierInfos.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 	{
-		barrierInfos.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrierInfos.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		barrierInfos.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		barrierInfos.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+		barrierInfos.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		barrierInfos.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
 	}
 	else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
 	{
-		barrierInfos.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-		barrierInfos.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		barrierInfos.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		barrierInfos.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+		barrierInfos.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		barrierInfos.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
 	}
 	else
 	{
 		throw std::runtime_error("Image > TransitionLayout : Transition not supported");
 	}
 
-	vkCmdPipelineBarrier(commadBuffer, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrierInfos);
+	VkDependencyInfo dependencyInfo{};
+	dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+	dependencyInfo.imageMemoryBarrierCount = 1;
+	dependencyInfo.pImageMemoryBarriers = &barrierInfos;
+
+	vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 }
 
 // Constructors & Destructors
@@ -192,13 +194,15 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 
 	for (uint32_t i = 1; i < m_mipLevels; i++)
 	{
-		VkImageMemoryBarrier blitBarrierInfos{};
-		blitBarrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		VkImageMemoryBarrier2 blitBarrierInfos{};
+		blitBarrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
 		blitBarrierInfos.image = m_pImpl->image;
 		blitBarrierInfos.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		blitBarrierInfos.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-		blitBarrierInfos.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		blitBarrierInfos.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		blitBarrierInfos.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		blitBarrierInfos.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+		blitBarrierInfos.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		blitBarrierInfos.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
 		blitBarrierInfos.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		blitBarrierInfos.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		blitBarrierInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -207,7 +211,12 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 		blitBarrierInfos.subresourceRange.baseArrayLayer = 0;
 		blitBarrierInfos.subresourceRange.layerCount = 1;
 
-		vkCmdPipelineBarrier(commandBuffer->GetCmd(), VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &blitBarrierInfos);
+		VkDependencyInfo blitDependencyInfo{};
+		blitDependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		blitDependencyInfo.imageMemoryBarrierCount = 1;
+		blitDependencyInfo.pImageMemoryBarriers = &blitBarrierInfos;
+
+		vkCmdPipelineBarrier2(commandBuffer->GetCmd(), &blitDependencyInfo);
 
 		VkImageBlit BlitInfos{};
 		BlitInfos.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -229,7 +238,10 @@ void Image::Upload(const void* pixels, uint32_t width, uint32_t height)
 		if (mipHeight > 1) mipHeight /= 2;
 	}
 
-	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, m_mipLevels - 1);
+	if (m_mipLevels > 1)
+	{
+		TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, m_mipLevels - 1);
+	}
 	TransitionLayout(commandBuffer->GetCmd(), m_pImpl->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_mipLevels - 1, 1);
 
 	vkEndCommandBuffer(commandBuffer->GetCmd());

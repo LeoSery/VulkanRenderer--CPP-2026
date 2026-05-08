@@ -169,10 +169,10 @@
     <ClCompile Include="src\GPU\descriptor_pool.cpp" />
     <ClCompile Include="src\GPU\descriptor_set.cpp" />
     <ClCompile Include="src\GPU\Image.cpp" />
+    <ClCompile Include="src\GPU\persistent_staging_buffer.cpp" />
     <ClCompile Include="src\GPU\pipeline.cpp" />
     <ClCompile Include="src\GPU\sampler.cpp" />
     <ClCompile Include="src\GPU\shader.cpp" />
-    <ClCompile Include="src\GPU\persistent_staging_buffer.h.cpp" />
     <ClCompile Include="vma_impl.cpp" />
   </ItemGroup>
   <ItemGroup>

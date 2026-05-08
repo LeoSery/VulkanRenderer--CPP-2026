@@ -78,7 +78,7 @@
     <ClCompile Include="src\GPU\descriptor_set.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
-    <ClCompile Include="src\GPU\persistent_staging_buffer.h.cpp">
+    <ClCompile Include="src\GPU\persistent_staging_buffer.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
   </ItemGroup>

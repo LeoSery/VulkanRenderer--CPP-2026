@@ -26,7 +26,6 @@ struct FrameData
 {
 	CommandBuffer* commandBuffer = nullptr;
 	VkSemaphore isImageAvailable = VK_NULL_HANDLE;
-	VkSemaphore isRenderFinished = VK_NULL_HANDLE;
 };
 
 struct GraphicsContext::Impl
@@ -47,6 +46,7 @@ struct GraphicsContext::Impl
 	vkb::Swapchain vkbSwapchain;
 	std::vector<std::unique_ptr<Image>> swapchainImages;
 	VkExtent2D swapchainExtent{};
+	std::vector<VkSemaphore> renderFinishedSemaphores;
 
 	// Render targets
 	std::unique_ptr<Image> backbuffer;
@@ -115,7 +115,11 @@ GraphicsContext::~GraphicsContext()
 	for (auto& frame : m_pImpl->frames)
 	{
 		vkDestroySemaphore(m_pImpl->device, frame.isImageAvailable, nullptr);
-		vkDestroySemaphore(m_pImpl->device, frame.isRenderFinished, nullptr);
+	}
+
+	for (auto& semaphore : m_pImpl->renderFinishedSemaphores)
+	{
+		vkDestroySemaphore(m_pImpl->device, semaphore, nullptr);
 	}
 
 	// CommandPool
@@ -264,7 +268,7 @@ void GraphicsContext::EndFrame()
 
 	VkSemaphoreSubmitInfo signalInfos{};
 	signalInfos.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-	signalInfos.semaphore = frame.isRenderFinished;
+	signalInfos.semaphore = m_pImpl->renderFinishedSemaphores[m_pImpl->swapchainImageIndex];
 	signalInfos.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
 
 	VkSubmitInfo2 submitInfos{};
@@ -286,7 +290,7 @@ void GraphicsContext::EndFrame()
 	VkPresentInfoKHR presentInfos{};
 	presentInfos.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfos.waitSemaphoreCount = 1;
-	presentInfos.pWaitSemaphores = &frame.isRenderFinished;
+	presentInfos.pWaitSemaphores = &m_pImpl->renderFinishedSemaphores[m_pImpl->swapchainImageIndex];
 	presentInfos.swapchainCount = 1;
 	presentInfos.pSwapchains = &m_pImpl->vkbSwapchain.swapchain;
 	presentInfos.pImageIndices = &m_pImpl->swapchainImageIndex;
@@ -508,9 +512,15 @@ void GraphicsContext::InitFrameData()
 	for (auto& frame : m_pImpl->frames)
 	{
 		frame.commandBuffer = &m_pImpl->commandPool->Acquire();
-
 		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isImageAvailable));
-		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &frame.isRenderFinished));
+	}
+
+	uint32_t imageCount = static_cast<uint32_t>(m_pImpl->swapchainImages.size());
+	m_pImpl->renderFinishedSemaphores.resize(imageCount);
+
+	for (auto& semaphore : m_pImpl->renderFinishedSemaphores)
+	{
+		VK_CHECK(vkCreateSemaphore(m_pImpl->device, &semaphoreInfos, nullptr, &semaphore));
 	}
 }
 

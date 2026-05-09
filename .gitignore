@@ -100,12 +100,12 @@ node_modules/
 # Compiled SPIR-V shaders
 *.spv
 
-# External dependencies — NE PAS ignorer
-# (headers et libs tiers committés volontairement)
+# External dependencies > DO NOT ignore
+# (headers and third-party libraries committed voluntarily)
 !**/external/include/**
 !**/external/lib/**
 
-# Old_Renderer — artefacts de build uniquement, source conservée
+# Old_Renderer > Build artifacts only, source code retained
 Old_Renderer/.vs/
 Old_Renderer/bin/
 Old_Renderer/build/
@@ -125,8 +125,11 @@ New_Renderer/[Dd]ebug/
 New_Renderer/[Rr]elease/
 New_Renderer/x64/
 
-# Vulkan validation layer settings (local uniquement)
+# Vulkan validation layer settings (local only)
 vk_layer_settings.txt
 
 # vulkan shaders
 *.spv
+
+# vcpkg installed packages (generated from vcpkg.json)
+New_Renderer/vcpkg_installed/

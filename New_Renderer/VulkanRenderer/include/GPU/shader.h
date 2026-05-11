@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <vulkan/vulkan.h>
 
@@ -16,6 +17,12 @@ enum class ShaderStage
 class Shader
 {
 public:
+	struct VertexInput
+	{
+		bool isValid = false;
+		std::vector<VkVertexInputAttributeDescription> attributes;
+	};
+
 	Shader(GraphicsContext& ctx, const std::string& path, ShaderStage stage);
 	~Shader();
 
@@ -26,6 +33,8 @@ public:
 
 	VkShaderModule GetModule() const;
 	VkShaderStageFlagBits GetVkStage() const;
+
+	VertexInput GetVertexInput() const;
 
 private:
 	struct Impl;

@@ -30,7 +30,7 @@ static VkBufferUsageFlags ConvertToVkUsage(Buffer::E_Usage usage)
 	return flags;
 }
 
-Buffer::Buffer(GraphicsContext& ctx, const CreateInfo& infos) : m_pImpl(std::make_unique<Impl>()), m_ctx(&ctx), m_size(infos.sizeInBytes), m_usage(infos.usage)
+Buffer::Buffer(GraphicsContext& ctx, const CreateInfos& infos) : m_pImpl(std::make_unique<Impl>()), m_ctx(&ctx), m_size(infos.sizeInBytes), m_usage(infos.usage)
 {
 	VkBufferCreateInfo bufferInfos{};
 	bufferInfos.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;

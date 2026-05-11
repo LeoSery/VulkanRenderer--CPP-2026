@@ -6,6 +6,7 @@
     "glm",
     "vk-bootstrap",
     "spirv-reflect",
+    "spirv-headers",
     "vulkan-memory-allocator",
     "rapidobj",
     "stb"

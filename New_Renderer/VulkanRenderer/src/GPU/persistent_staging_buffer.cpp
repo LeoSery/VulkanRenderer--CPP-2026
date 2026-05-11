@@ -38,7 +38,7 @@ VkBuffer StagingBufferHandle::GetVkBuffer() const
 
 PersistentStagingBuffer::PersistentStagingBuffer(GraphicsContext& ctx) : m_ctx(&ctx)
 {
-	Buffer::CreateInfo newPoolBufferInfos{};
+	Buffer::CreateInfos newPoolBufferInfos{};
 	newPoolBufferInfos.sizeInBytes = POOL_SIZE;
 	newPoolBufferInfos.usage = Buffer::E_Usage::TransferSrc;
 
@@ -55,7 +55,7 @@ StagingBufferHandle PersistentStagingBuffer::Acquire(size_t size)
 	}
 
 	// otherwise, create a new temporary buffer with the exact size
-	Buffer::CreateInfo newTemporaryBufferInfos{};
+	Buffer::CreateInfos newTemporaryBufferInfos{};
 	newTemporaryBufferInfos.sizeInBytes = size;
 	newTemporaryBufferInfos.usage = Buffer::E_Usage::TransferSrc;
 

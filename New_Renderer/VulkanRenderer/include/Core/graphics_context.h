@@ -41,6 +41,7 @@ private:
 	void InitFrameData();
 	void InitPipeline();
 	void InitTexture();
+	void InitMesh();
 
 	std::unique_ptr<Impl> m_pImpl;
 };

@@ -19,13 +19,13 @@ public:
 		UniformBuffer = 1 << 4,
 	};
 
-	struct CreateInfo
+	struct CreateInfos
 	{
 		size_t sizeInBytes = 0;
 		E_Usage usage = E_Usage::VertexBuffer;
 	};
 
-	Buffer(GraphicsContext& ctx, const CreateInfo& infos);
+	Buffer(GraphicsContext& ctx, const CreateInfos& infos);
 	~Buffer() noexcept;
 
 	void Upload(const void* data, size_t size);

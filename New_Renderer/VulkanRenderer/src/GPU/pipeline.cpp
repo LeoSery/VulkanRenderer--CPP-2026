@@ -6,6 +6,7 @@
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
+#include <vector>
 
 struct Pipeline::Impl
 {
@@ -37,9 +38,47 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	shaderStagesInfos[1].module = fragmentShader.GetModule();
 	shaderStagesInfos[1].pName = "main"; //name of the target function in the fragment shader
 
-	// Vertex > position of vertices in the shader
+	// Vertex Binding > construct attriibutes and binding from vertex shader
+	auto getStride = [](VkFormat format) -> uint32_t
+		{
+			switch (format)
+			{
+			case VK_FORMAT_R32_SFLOAT:
+				return sizeof(float);
+			case VK_FORMAT_R32G32_SFLOAT:
+				return sizeof(float) * 2;
+			case VK_FORMAT_R32G32B32_SFLOAT:
+				return sizeof(float) * 3;
+			case VK_FORMAT_R32G32B32A32_SFLOAT:
+				return sizeof(float) * 4;
+			default:
+				throw std::runtime_error("Pipeline > getStride(): unsupported VkFormat");
+			}
+		};
+
+	std::vector<VkVertexInputAttributeDescription> attributes;
+	std::vector<VkVertexInputBindingDescription> bindings;
+
+	Shader::VertexInput vertexInput = vertexShader.GetVertexInput();
+	if (vertexInput.isValid)
+	{
+		for (auto& attribute : vertexInput.attributes)
+		{
+			attributes.push_back(attribute);
+			bindings.push_back({
+				.binding = attribute.binding,
+				.stride = getStride(attribute.format),
+				.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+				});
+		}
+	}
+
 	VkPipelineVertexInputStateCreateInfo vertexInputInfos{};
-	vertexInputInfos.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO; //Empty > No vertex input = position are hardcoded in the shader
+	vertexInputInfos.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfos.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size());
+	vertexInputInfos.pVertexAttributeDescriptions = attributes.data();
+	vertexInputInfos.vertexBindingDescriptionCount = static_cast<uint32_t>(bindings.size());
+	vertexInputInfos.pVertexBindingDescriptions = bindings.data();
 
 	// Assembly > the way of the vertex are assemble
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfos{};

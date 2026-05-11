@@ -11,6 +11,8 @@
 #include "GPU/descriptor_set.h"
 #include "GPU/Buffer.h"
 #include "GPU/persistent_staging_buffer.h"
+#include "GPU/mesh.h"
+#include "Loaders/obj_loader.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -69,7 +71,9 @@ struct GraphicsContext::Impl
 	std::unique_ptr<Sampler> sampler;
 	std::unique_ptr<DescriptorPool> descriptorPool;
 	std::unique_ptr<DescriptorSet> descriptorSet;
-	std::unique_ptr<Buffer> indexBuffer;
+
+	// Mesh
+	std::unique_ptr<Mesh> mesh;
 
 	// Buffer
 	std::unique_ptr<PersistentStagingBuffer> stagingBuffer;
@@ -86,6 +90,7 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitFrameData();
 	InitPersistentBuffer();
 	InitTexture();
+	InitMesh();
 	InitPipeline();
 }
 
@@ -126,7 +131,7 @@ GraphicsContext::~GraphicsContext()
 	m_pImpl->commandPool.reset();
 
 	// Image
-	m_pImpl->indexBuffer.reset();
+	m_pImpl->mesh.reset();
 	m_pImpl->backbuffer.reset();
 	m_pImpl->depthbuffer.reset();
 	m_pImpl->stagingBuffer.reset();
@@ -215,8 +220,7 @@ void GraphicsContext::BeginFrame()
 	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
 	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
 	
-	vkCmdBindIndexBuffer(frame.commandBuffer->GetCmd(), m_pImpl->indexBuffer->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(frame.commandBuffer->GetCmd(), 6, 1, 0, 0, 0);
+	m_pImpl->mesh->Draw(frame.commandBuffer->GetCmd());
 
 	vkCmdEndRendering(frame.commandBuffer->GetCmd());
 }
@@ -576,11 +580,10 @@ void GraphicsContext::InitTexture()
 
 	m_pImpl->descriptorSet = std::make_unique<DescriptorSet>(*this, descriptorSetCreateInfos);
 	m_pImpl->descriptorSet->Bind<Image>(0, *m_pImpl->texture, m_pImpl->sampler.get());
+}
 
-	uint32_t indices[] = { 0, 1, 2, 0, 2, 3 };
-	Buffer::CreateInfo indexCI{};
-	indexCI.sizeInBytes = sizeof(indices);
-	indexCI.usage = Buffer::E_Usage::IndexBuffer | Buffer::E_Usage::TransferDst;
-	m_pImpl->indexBuffer = std::make_unique<Buffer>(*this, indexCI);
-	m_pImpl->indexBuffer->Upload(indices, sizeof(indices));
+void GraphicsContext::InitMesh()
+{
+	// Blender suzanne
+	m_pImpl->mesh = ObjLoader::Load(*this, "assets/Blender_Suzanne.obj");
 }

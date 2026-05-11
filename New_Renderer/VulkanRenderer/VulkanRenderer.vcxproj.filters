@@ -37,6 +37,12 @@
     <Filter Include="Shaders">
       <UniqueIdentifier>{71bff202-faff-4dd8-b86b-451b0bd5f37e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Fichiers d%27en-tête\Loaders">
+      <UniqueIdentifier>{b99fb19e-e10a-4d19-a67c-3763498e7027}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fichiers sources\Loaders">
+      <UniqueIdentifier>{227943d8-1578-42c3-ad04-265d1e5ecc18}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -81,6 +87,12 @@
     <ClCompile Include="src\GPU\persistent_staging_buffer.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
+    <ClCompile Include="src\GPU\mesh.cpp">
+      <Filter>Fichiers sources\GPU</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Loaders\obj_loader.cpp">
+      <Filter>Fichiers sources\Loaders</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Core\window.h">
@@ -121,6 +133,12 @@
     </ClInclude>
     <ClInclude Include="include\GPU\persistent_staging_buffer.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\GPU\mesh.h">
+      <Filter>Fichiers d%27en-tête\GPU</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Loaders\obj_loader.h">
+      <Filter>Fichiers d%27en-tête\Loaders</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

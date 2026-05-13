@@ -19,10 +19,26 @@
 #include <vma/vk_mem_alloc.h>
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <array>
 #include <vector>
 #include <stdexcept>
 #include <memory>
+#include <cassert>
+
+// Anonymous namespace to keep data private outside of this file
+namespace
+{
+	struct MVPData
+	{
+		glm::mat4 model;
+		glm::mat4 view;
+		glm::mat4 projection;
+	};
+}
 
 struct FrameData
 {
@@ -53,6 +69,7 @@ struct GraphicsContext::Impl
 	// Render targets
 	std::unique_ptr<Image> backbuffer;
 	std::unique_ptr<Image> depthbuffer;
+	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
 	// Pool and FrameData
 	std::unique_ptr<CommandPool> commandPool;
@@ -78,6 +95,29 @@ struct GraphicsContext::Impl
 	// Buffer
 	std::unique_ptr<PersistentStagingBuffer> stagingBuffer;
 };
+
+static VkFormat FindCurrentDepthFormat(VkPhysicalDevice physicalDevice)
+{
+	// Candidate formats, in order of preference
+	constexpr VkFormat candidatesFormat[] = {
+		VK_FORMAT_D32_SFLOAT,         // Maximum precision, no stencil buffer
+		VK_FORMAT_D32_SFLOAT_S8_UINT, // If we want a stencil buffer later on
+		VK_FORMAT_D24_UNORM_S8_UINT   // Very common on desktops, slightly less precise
+	};
+
+	for (VkFormat format : candidatesFormat)
+	{
+		VkFormatProperties properties;
+		vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &properties);
+
+		if (properties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+		{
+			return format;
+		}
+	}
+
+	throw std::runtime_error("GraphicsContext > FindDepthFormat(): No supported depth format found");
+}
 	
 GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl>())
 {
@@ -178,6 +218,13 @@ void GraphicsContext::BeginFrame()
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	);
 
+	// Transition depthbuffer layout to DEPTH_ATTACHMENT - tells the GPU we are going to read into it (read or write ? TODO > Check)
+	encoder->TransitionImageLayout(
+		*m_pImpl->depthbuffer,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL
+	);
+
 	// Background clear color
 	VkClearValue clearValue{};
 	clearValue.color = { { 0.1f, 0.1f, 0.1f, 1.0f } };
@@ -191,6 +238,15 @@ void GraphicsContext::BeginFrame()
 	colorAttachementInfos.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	colorAttachementInfos.clearValue = clearValue;
 
+	// Depth test configuration
+	VkRenderingAttachmentInfo depthAttachementInfos{};
+	depthAttachementInfos.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+	depthAttachementInfos.imageView = m_pImpl->depthbuffer->GetVkImageView();
+	depthAttachementInfos.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+	depthAttachementInfos.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depthAttachementInfos.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depthAttachementInfos.clearValue.depthStencil = { 1.0f, 1 };
+
 	// Describe the rendering pass > attachments, render area, and layer count
 	VkRenderingInfo renderingInfos{};
 	renderingInfos.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -198,6 +254,7 @@ void GraphicsContext::BeginFrame()
 	renderingInfos.layerCount = 1;
 	renderingInfos.colorAttachmentCount = 1;
 	renderingInfos.pColorAttachments = &colorAttachementInfos;
+	renderingInfos.pDepthAttachment = &depthAttachementInfos;
 
 	vkCmdBeginRendering(frame.commandBuffer->GetCmd(), &renderingInfos);
 
@@ -219,6 +276,15 @@ void GraphicsContext::BeginFrame()
 	
 	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
 	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
+
+	// Hardcode camera for the test
+	MVPData mvpData{};
+	mvpData.model = glm::mat4(1.0f);
+	mvpData.view = glm::lookAt(glm::vec3(0, 0, 3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0)); // Identity matrix > camera look at Z = 5 and look to the origin
+	mvpData.projection = glm::perspective(glm::radians(60.0f), static_cast<float>(m_pImpl->swapchainExtent.width) / static_cast<float>(m_pImpl->swapchainExtent.height), 0.1f, 100.0f);
+	mvpData.projection[1][1] *= -1; // Y-flip Vulkan
+
+	vkCmdPushConstants(frame.commandBuffer->GetCmd(), m_pImpl->pipeline->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MVPData), &mvpData);
 	
 	m_pImpl->mesh->Draw(frame.commandBuffer->GetCmd());
 
@@ -420,6 +486,11 @@ void GraphicsContext::InitDevice()
 	m_pImpl->device = vkbDevice.device;
 	m_pImpl->graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
 	m_pImpl->graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+	VkPhysicalDeviceProperties deviceProperties{};
+	vkGetPhysicalDeviceProperties(m_pImpl->physicalDevice, &deviceProperties);
+
+	assert(deviceProperties.limits.maxPushConstantsSize >= sizeof(MVPData) && "GraphicsContext > InitDevice(): GPU does not support enough push constant space for MVPData");
 }
 
 void GraphicsContext::InitPersistentBuffer()
@@ -481,6 +552,8 @@ void GraphicsContext::InitImages()
 {
 	VkExtent2D extent = m_pImpl->swapchainExtent;
 
+	m_pImpl->depthFormat = FindCurrentDepthFormat(m_pImpl->physicalDevice);
+
 	// Backbuffer > Intermediate render target
 	// We render into this image instead of directly into the swapchain.
 	// Once rendering is done, we blit (Copy) it to the swapchain image for presentation (Show).
@@ -488,7 +561,7 @@ void GraphicsContext::InitImages()
 	Image::CreateInfos backBufferCreateInfos{};
 	backBufferCreateInfos.width = extent.width;
 	backBufferCreateInfos.height = extent.height;
-	backBufferCreateInfos.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+	backBufferCreateInfos.format = BACKBUFFER_FORMAT;
 	backBufferCreateInfos.usage = Image::E_Usage::ColorAttachment | Image::E_Usage::TransferSrc | Image::E_Usage::TransferDst | Image::E_Usage::Storage;
 	backBufferCreateInfos.genMips = false;
 	m_pImpl->backbuffer = std::make_unique<Image>(*this, backBufferCreateInfos);
@@ -499,7 +572,7 @@ void GraphicsContext::InitImages()
 	Image::CreateInfos depthBufferCreateInfos{};
 	depthBufferCreateInfos.width = extent.width;
 	depthBufferCreateInfos.height = extent.height;
-	depthBufferCreateInfos.format = VK_FORMAT_D32_SFLOAT;
+	depthBufferCreateInfos.format = m_pImpl->depthFormat;
 	depthBufferCreateInfos.usage = Image::E_Usage::DepthAttachement;
 	depthBufferCreateInfos.genMips = false;
 	m_pImpl->depthbuffer = std::make_unique<Image>(*this, depthBufferCreateInfos);
@@ -530,10 +603,15 @@ void GraphicsContext::InitFrameData()
 
 void GraphicsContext::InitPipeline()
 {
-	// Assign each shader to pipeline
 	m_pImpl->vertexShader = std::make_unique<Shader>(*this, "shaders/basic.vert.spv", ShaderStage::Vertex);
 	m_pImpl->fragmentShader = std::make_unique<Shader>(*this, "shaders/basic.frag.spv", ShaderStage::Fragment);
-	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader, *m_pImpl->descriptorSet);
+
+	VkPushConstantRange MVPRangeInfos{};
+	MVPRangeInfos.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Only the vertex shader can read the MVP
+	MVPRangeInfos.offset = 0;
+	MVPRangeInfos.size = sizeof(MVPData);
+
+	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader, *m_pImpl->descriptorSet, m_pImpl->depthFormat, MVPRangeInfos);
 }
 
 void GraphicsContext::InitTexture()

@@ -15,7 +15,7 @@ struct Pipeline::Impl
 	VkPipeline pipeline = VK_NULL_HANDLE;
 };
 
-Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet) : m_pImpl(std::make_unique<Impl>())
+Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet, VkFormat depthFormat, VkPushConstantRange pushConstantRange) : m_pImpl(std::make_unique<Impl>())
 {
 	m_pImpl->device = ctx.GetDevice();
 
@@ -25,6 +25,9 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	layoutInfo.setLayoutCount = 1;
 	layoutInfo.pSetLayouts = &descriptorSetLayout;
+	layoutInfo.pushConstantRangeCount = (pushConstantRange.size > 0) ? 1 : 0;
+	layoutInfo.pPushConstantRanges = (pushConstantRange.size > 0) ? &pushConstantRange : nullptr;
+
 	VK_CHECK(vkCreatePipelineLayout(m_pImpl->device, &layoutInfo, nullptr, &m_pImpl->layout));
 
 	VkPipelineShaderStageCreateInfo shaderStagesInfos[2]{};
@@ -114,6 +117,14 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	colorBlendingInfos.attachmentCount = 1;
 	colorBlendingInfos.pAttachments = &colorBlendAttachementInfos;
 
+	VkPipelineDepthStencilStateCreateInfo depthStencilInfos{};
+	depthStencilInfos.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencilInfos.depthTestEnable = (depthFormat != VK_FORMAT_UNDEFINED) ? VK_TRUE : VK_FALSE;
+	depthStencilInfos.depthWriteEnable = (depthFormat != VK_FORMAT_UNDEFINED) ? VK_TRUE : VK_FALSE;
+	depthStencilInfos.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthStencilInfos.minDepthBounds = 0.0f;
+	depthStencilInfos.maxDepthBounds = 1.0f;
+
 	// Dynamic rendering - specifies color attachment format instead of using a VkRenderPass
 	VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
@@ -123,11 +134,12 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	dynamicStateInfos.pDynamicStates = dynamicStates;
 
 	// Format of the rendering (the way the GPU organise this in this memory)
-	VkFormat colorFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+	VkFormat colorFormat = BACKBUFFER_FORMAT;
 	VkPipelineRenderingCreateInfo renderingInfos{};
 	renderingInfos.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 	renderingInfos.colorAttachmentCount = 1;
 	renderingInfos.pColorAttachmentFormats = &colorFormat;
+	renderingInfos.depthAttachmentFormat = depthFormat;
 
 	// Pipeline > Assemble all previous states into the final graphics pipeline
 	VkGraphicsPipelineCreateInfo pipelineInfos{};
@@ -142,6 +154,7 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	pipelineInfos.pMultisampleState = &multisamplingInfos;
 	pipelineInfos.pColorBlendState = &colorBlendingInfos;
 	pipelineInfos.pDynamicState = &dynamicStateInfos;
+	pipelineInfos.pDepthStencilState = &depthStencilInfos;
 	pipelineInfos.layout = m_pImpl->layout;
 
 	VK_CHECK(vkCreateGraphicsPipelines(m_pImpl->device, VK_NULL_HANDLE, 1, &pipelineInfos, nullptr, &m_pImpl->pipeline));

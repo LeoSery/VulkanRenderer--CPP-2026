@@ -11,7 +11,7 @@ class DescriptorSet;
 class Pipeline
 {
 public:
-	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet);
+	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet, VkFormat depthFormat = VK_FORMAT_UNDEFINED, VkPushConstantRange pushConstantRange = {});
 	~Pipeline();
 
 	Pipeline(const Pipeline&) = delete;

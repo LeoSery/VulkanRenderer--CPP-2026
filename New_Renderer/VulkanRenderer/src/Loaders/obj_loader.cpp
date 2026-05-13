@@ -44,6 +44,36 @@ namespace
 
 namespace ObjLoader
 {
+	static void NormalizeMeshPositions(std::vector<glm::vec3>& positions)
+	{
+		if (positions.empty())
+		{
+			return;
+		}
+
+		// 1. Init the bounds with le largest and lowest value possible
+		glm::vec3 aabbMin(FLT_MAX);
+		glm::vec3 aabbMax(-FLT_MAX);
+
+		// 2. For each position, we check whether it is smaller or larger than the stored values; if so, we store it as a new limit value
+		for (const auto& pos : positions)
+		{
+			aabbMin = glm::min(aabbMin, pos);
+			aabbMax = glm::max(aabbMax, pos);
+		}
+
+		// 3. Compute the center and the extent (length of the diagonal from the minimum corner to the maximum corner) of the bounding box
+		glm::vec3 center = (aabbMin + aabbMax) * 0.5f;
+		float extent = glm::length(aabbMax - aabbMin) * 0.5f;
+		float scale = (extent > 0.0f) ? 1.0f / extent : 1.0f;
+
+		// 4. Applying the offset to the target values
+		for (auto& pos : positions)
+		{
+			pos = (pos - center) * scale;
+		}
+	}
+
 	std::unique_ptr<Mesh> ObjLoader::Load(GraphicsContext& ctx, const std::string& path)
 	{
 		// 1. Parse the file
@@ -129,6 +159,8 @@ namespace ObjLoader
 			newPrimitive.indexCount = static_cast<uint32_t>(indices.size() - startIndex);
 			result->primitives.push_back(newPrimitive);
 		}
+
+		NormalizeMeshPositions(positions);
 
 		// Upload Positions into Vertex buffer to the GPU
 		Buffer::CreateInfos positionsBufferCreateInfos{};

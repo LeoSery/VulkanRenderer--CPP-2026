@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <vulkan/vulkan.h>
+#include <glm/mat4x4.hpp>
 
 class Buffer;
 class GraphicsContext;
@@ -25,6 +26,7 @@ public:
 	std::array<std::unique_ptr<Buffer>, MAX_VERTEX_BUFFERS> vertexBuffers = {};
 	std::unique_ptr<Buffer> indexBuffer = nullptr;
 	std::vector<Primitive> primitives = {};
+	glm::mat4 transform = glm::mat4(1.0f);
 
 	void Draw(VkCommandBuffer commandBuffer) const;
 };

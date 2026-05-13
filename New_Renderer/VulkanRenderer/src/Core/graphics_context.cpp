@@ -13,6 +13,7 @@
 #include "GPU/persistent_staging_buffer.h"
 #include "GPU/mesh.h"
 #include "Loaders/obj_loader.h"
+#include "Core/camera.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -20,6 +21,7 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -94,6 +96,15 @@ struct GraphicsContext::Impl
 
 	// Buffer
 	std::unique_ptr<PersistentStagingBuffer> stagingBuffer;
+
+	// Camera
+	std::unique_ptr<Camera> camera;
+
+	// Time
+	float lastTime = 0.0;
+
+	// Window
+	GLFWwindow* window = nullptr;
 };
 
 static VkFormat FindCurrentDepthFormat(VkPhysicalDevice physicalDevice)
@@ -132,6 +143,7 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitTexture();
 	InitMesh();
 	InitPipeline();
+	InitCamera();
 }
 
 GraphicsContext::~GraphicsContext()
@@ -191,6 +203,14 @@ GraphicsContext::~GraphicsContext()
 
 void GraphicsContext::BeginFrame()
 {
+	// DeltaTime
+	double currentTime = glfwGetTime();
+	float deltaTime = static_cast<float>(currentTime - m_pImpl->lastTime);
+	m_pImpl->lastTime = currentTime;
+
+	// Input
+	m_pImpl->camera->ProcessInput(m_pImpl->window, deltaTime);
+
 	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
 	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
 
@@ -277,12 +297,14 @@ void GraphicsContext::BeginFrame()
 	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
 	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
-	// Hardcode camera for the test
+	// Set the Model / View / Project data
+	float aspectRatio = 0.0f;
+	aspectRatio = (static_cast<float>(m_pImpl->swapchainExtent.width) / (static_cast<float>(m_pImpl->swapchainExtent.height)));
+
 	MVPData mvpData{};
-	mvpData.model = glm::mat4(1.0f);
-	mvpData.view = glm::lookAt(glm::vec3(0, 0, 3), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0)); // Identity matrix > camera look at Z = 5 and look to the origin
-	mvpData.projection = glm::perspective(glm::radians(60.0f), static_cast<float>(m_pImpl->swapchainExtent.width) / static_cast<float>(m_pImpl->swapchainExtent.height), 0.1f, 100.0f);
-	mvpData.projection[1][1] *= -1; // Y-flip Vulkan
+	mvpData.model = m_pImpl->mesh->transform;
+	mvpData.view = m_pImpl->camera->GetViewMatrix();
+	mvpData.projection = m_pImpl->camera->GetProjectionMatrix(aspectRatio);
 
 	vkCmdPushConstants(frame.commandBuffer->GetCmd(), m_pImpl->pipeline->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MVPData), &mvpData);
 	
@@ -432,6 +454,9 @@ void GraphicsContext::InitInstance()
 
 void GraphicsContext::InitSurface(Window& window)
 {
+	m_pImpl->window = window.GetHandle();
+	glfwSetInputMode(m_pImpl->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
 	VK_CHECK(glfwCreateWindowSurface(
 		m_pImpl->vkbInstance.instance,
 		window.GetHandle(),
@@ -664,4 +689,11 @@ void GraphicsContext::InitMesh()
 {
 	// Blender suzanne
 	m_pImpl->mesh = ObjLoader::Load(*this, "assets/Blender_Suzanne.obj");
+	m_pImpl->mesh->transform = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate the mesh to 180 for toward camera
+}
+
+void GraphicsContext::InitCamera()
+{
+	Camera::CreateInfos cameraInfos{};
+	m_pImpl->camera = std::make_unique<Camera>(cameraInfos);
 }

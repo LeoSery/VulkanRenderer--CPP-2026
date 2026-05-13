@@ -161,6 +161,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="src\Core\camera.cpp" />
     <ClCompile Include="src\Core\graphics_context.cpp" />
     <ClCompile Include="src\Core\window.cpp" />
     <ClCompile Include="src\GPU\buffer.cpp" />
@@ -178,6 +179,7 @@
     <ClCompile Include="vma_impl.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\Core\camera.h" />
     <ClInclude Include="include\Core\graphics_context.h" />
     <ClInclude Include="include\Core\window.h" />
     <ClInclude Include="include\GPU\buffer.h" />

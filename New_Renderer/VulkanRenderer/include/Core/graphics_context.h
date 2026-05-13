@@ -43,6 +43,7 @@ private:
 	void InitPipeline();
 	void InitTexture();
 	void InitMesh();
+	void InitCamera();
 
 	std::unique_ptr<Impl> m_pImpl;
 };

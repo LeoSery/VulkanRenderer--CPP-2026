@@ -107,6 +107,8 @@ struct GraphicsContext::Impl
 	GLFWwindow* window = nullptr;
 };
 
+// Query the GPU for the best supported depth format
+// We prefer D32_SFLOAT for maximum precision, with fallbacks for older hardware
 static VkFormat FindCurrentDepthFormat(VkPhysicalDevice physicalDevice)
 {
 	// Candidate formats, in order of preference
@@ -144,6 +146,8 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitMesh();
 	InitPipeline();
 	InitCamera();
+
+	m_pImpl->lastTime = glfwGetTime(); // Initialize lastTime so the first deltaTime is near zero instead of the full init duration
 }
 
 GraphicsContext::~GraphicsContext()
@@ -238,7 +242,7 @@ void GraphicsContext::BeginFrame()
 		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 	);
 
-	// Transition depthbuffer layout to DEPTH_ATTACHMENT - tells the GPU we are going to read into it (read or write ? TODO > Check)
+	// Transition depth buffer layout to DEPTH_ATTACHMENT so the GPU can read and write depth values during rendering
 	encoder->TransitionImageLayout(
 		*m_pImpl->depthbuffer,
 		VK_IMAGE_LAYOUT_UNDEFINED,
@@ -297,10 +301,13 @@ void GraphicsContext::BeginFrame()
 	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
 	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
-	// Set the Model / View / Project data
+	// Compute aspect ratio from swapchain extent to avoid distortion on non-square windows
 	float aspectRatio = 0.0f;
 	aspectRatio = (static_cast<float>(m_pImpl->swapchainExtent.width) / (static_cast<float>(m_pImpl->swapchainExtent.height)));
 
+	// Set the MVP (Model/View /Projection) data
+	// Build MVP matrices and push them to the vertex shader via push constants
+	// model: object transform | view: camera | projection: perspective
 	MVPData mvpData{};
 	mvpData.model = m_pImpl->mesh->transform;
 	mvpData.view = m_pImpl->camera->GetViewMatrix();
@@ -326,6 +333,7 @@ void GraphicsContext::EndFrame()
 		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
 	);
 
+	// Transition swapchain image layout to TransferDst so it can receive the blit from the backbuffer
 	encoder->TransitionImageLayout(
 		swapchainImage,
 		VK_IMAGE_LAYOUT_UNDEFINED,
@@ -340,6 +348,7 @@ void GraphicsContext::EndFrame()
 		m_pImpl->swapchainExtent
 	);
 
+	// Transition swapchain image layout to PresentSrc so it can be presented to the screen
 	encoder->TransitionImageLayout(
 		swapchainImage,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -515,6 +524,7 @@ void GraphicsContext::InitDevice()
 	VkPhysicalDeviceProperties deviceProperties{};
 	vkGetPhysicalDeviceProperties(m_pImpl->physicalDevice, &deviceProperties);
 
+	// Ensure the GPU supports enough push constant space for our MVP matrices (3 x mat4 = 192 bytes)
 	assert(deviceProperties.limits.maxPushConstantsSize >= sizeof(MVPData) && "GraphicsContext > InitDevice(): GPU does not support enough push constant space for MVPData");
 }
 
@@ -631,6 +641,8 @@ void GraphicsContext::InitPipeline()
 	m_pImpl->vertexShader = std::make_unique<Shader>(*this, "shaders/basic.vert.spv", ShaderStage::Vertex);
 	m_pImpl->fragmentShader = std::make_unique<Shader>(*this, "shaders/basic.frag.spv", ShaderStage::Fragment);
 
+	// Declare the push constant range for the MVP matrices
+	// Only the vertex shader needs it - size must match the MVPData struct exactly
 	VkPushConstantRange MVPRangeInfos{};
 	MVPRangeInfos.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Only the vertex shader can read the MVP
 	MVPRangeInfos.offset = 0;
@@ -696,4 +708,6 @@ void GraphicsContext::InitCamera()
 {
 	Camera::CreateInfos cameraInfos{};
 	m_pImpl->camera = std::make_unique<Camera>(cameraInfos);
+	m_pImpl->camera->SetPosition({0.0f, 0.0f, -3.0f});
+	m_pImpl->camera->SetRotation(90.0f, 0.0f);
 }

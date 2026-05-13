@@ -28,6 +28,9 @@ public:
 	glm::mat4 GetViewMatrix() const;
 	glm::mat4 GetProjectionMatrix(float aspectRatio) const;
 
+	void SetPosition(const glm::vec3& position);
+	void SetRotation(const float yaw, const float pitch);
+
 private:
 	float m_fov;
 	float m_nearPlane;

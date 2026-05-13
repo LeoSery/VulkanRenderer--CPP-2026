@@ -44,6 +44,8 @@ namespace
 
 namespace ObjLoader
 {
+	// Normalize the mesh so it fits in a unit sphere centered at the origin
+	// This ensures any OBJ loads correctly regardless of authoring tool or export settings
 	static void NormalizeMeshPositions(std::vector<glm::vec3>& positions)
 	{
 		if (positions.empty())

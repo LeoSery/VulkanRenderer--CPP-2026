@@ -59,6 +59,10 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 			}
 		};
 
+	// Vertex Input
+	// For each vertex attribute declared in the shader (position, normal, UV...),
+	// we create a binding that tells the GPU where to find the data in the vertex buffer
+	// and how many bytes to skip to get to the next vertex (stride)
 	std::vector<VkVertexInputAttributeDescription> attributes;
 	std::vector<VkVertexInputBindingDescription> bindings;
 
@@ -121,7 +125,7 @@ Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentS
 	depthStencilInfos.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depthStencilInfos.depthTestEnable = (depthFormat != VK_FORMAT_UNDEFINED) ? VK_TRUE : VK_FALSE;
 	depthStencilInfos.depthWriteEnable = (depthFormat != VK_FORMAT_UNDEFINED) ? VK_TRUE : VK_FALSE;
-	depthStencilInfos.depthCompareOp = VK_COMPARE_OP_LESS;
+	depthStencilInfos.depthCompareOp = VK_COMPARE_OP_LESS; // Enable depth testing: fragments are kept only if closer than what's already in the depth buffer
 	depthStencilInfos.minDepthBounds = 0.0f;
 	depthStencilInfos.maxDepthBounds = 1.0f;
 

@@ -142,7 +142,7 @@ namespace ObjLoader
 					{
 						float uv_x = objData.attributes.texcoords[index.texcoord_index * 2 + 0];
 						float uv_y = objData.attributes.texcoords[index.texcoord_index * 2 + 1];
-						uvs.push_back({uv_x, uv_y});
+						uvs.push_back({uv_x, 1.0f - uv_y}); // Flip V: .obj origin is bottom-left and vulkan is top-left
 					}
 					else
 					{

@@ -41,8 +41,10 @@ Buffer::Buffer(GraphicsContext& ctx, const CreateInfos& infos) : m_pImpl(std::ma
 	allocationInfos.usage = VMA_MEMORY_USAGE_AUTO;
 
 	// If this buffer is a staging buffer, it must be in CPU-visible memory.
-	bool isStagingBuffer = (infos.usage & E_Usage::TransferSrc) == E_Usage::TransferSrc;
-	if (isStagingBuffer)
+	// Staging buffers (TransferSrc) and UBOs updated every frame (HostVisible) must
+	// be in CPU-visible memory and persistently mapped to avoid an intermediate staging buffer.
+	bool isHostVisible = (infos.usage & E_Usage::TransferSrc) == E_Usage::TransferSrc || (infos.usage & E_Usage::HostVisible) == E_Usage::HostVisible;
+	if (isHostVisible)
 	{
 		allocationInfos.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 	}
@@ -58,7 +60,7 @@ Buffer::~Buffer() noexcept
 void Buffer::Upload(const void* data, size_t size)
 {
 	// If buffer is a host-visible buffer (CPU-Readable, direct writing)
-	bool isHostVisible = (m_usage & E_Usage::TransferSrc) == E_Usage::TransferSrc; // Check whether the TransferSrc flag is present in this buffer's flag combination.
+	bool isHostVisible = (m_usage & E_Usage::TransferSrc) == E_Usage::TransferSrc || (m_usage & E_Usage::HostVisible) == E_Usage::HostVisible; // Check whether the TransferSrc flag is present in this buffer's flag combination.
 	if (isHostVisible)
 	{
 		void* mappedData = m_pImpl->allocationInfos.pMappedData;

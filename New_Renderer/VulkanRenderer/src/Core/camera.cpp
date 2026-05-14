@@ -86,6 +86,31 @@ glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const
 	return projection;
 }
 
+glm::vec3 Camera::GetPosition() const
+{
+	return glm::vec3();
+}
+
+float Camera::GetFOV() const
+{
+	return m_fov;
+}
+
+float Camera::GetNearPlane() const
+{
+	return m_nearPlane;
+}
+
+float Camera::GetFarPlane() const
+{
+	return m_farPlane;
+}
+
+float Camera::GetMoveSpeed() const
+{
+	return m_moveSpeed;
+}
+
 void Camera::SetPosition(const glm::vec3& position)
 {
 	m_position = position;
@@ -95,4 +120,9 @@ void Camera::SetRotation(const float yaw, const float pitch)
 {
 	m_yaw = yaw;
 	m_pitch = glm::clamp(pitch, -89.0f, 89.0f);
+}
+
+void Camera::SetMoveSpeed(float speed)
+{
+	m_moveSpeed = speed;
 }

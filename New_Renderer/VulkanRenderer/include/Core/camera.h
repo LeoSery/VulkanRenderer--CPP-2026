@@ -23,13 +23,22 @@ public:
 
 	void ProcessInput(GLFWwindow* window, float deltaTime);
 
+	// Gettes
 	glm::vec3 GetForwardVector() const;
 	glm::vec3 GetRightVector() const;
 	glm::mat4 GetViewMatrix() const;
 	glm::mat4 GetProjectionMatrix(float aspectRatio) const;
+	glm::vec3 GetPosition() const;
 
+	float GetFOV() const;
+	float GetNearPlane() const;
+	float GetFarPlane() const;
+	float GetMoveSpeed() const;
+
+	// Setters
 	void SetPosition(const glm::vec3& position);
 	void SetRotation(const float yaw, const float pitch);
+	void SetMoveSpeed(float speed);
 
 private:
 	float m_fov;

@@ -96,6 +96,12 @@
     <ClCompile Include="src\Core\camera.cpp">
       <Filter>Fichiers sources\Core</Filter>
     </ClCompile>
+    <ClCompile Include="src\Core\scene_data.cpp">
+      <Filter>Fichiers sources\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Loaders\image_loader.cpp">
+      <Filter>Fichiers sources\Loaders</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Core\window.h">
@@ -145,6 +151,12 @@
     </ClInclude>
     <ClInclude Include="include\Core\camera.h">
       <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\scene_data.h">
+      <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Loaders\image_loader.h">
+      <Filter>Fichiers d%27en-tête\Loaders</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

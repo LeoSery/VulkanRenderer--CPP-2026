@@ -9,6 +9,10 @@
     "spirv-headers",
     "vulkan-memory-allocator",
     "rapidobj",
-    "stb"
+    "stb",
+    {
+      "name": "imgui",
+      "features" : ["glfw-binding", "vulkan-binding"]
+    }
   ]
 }

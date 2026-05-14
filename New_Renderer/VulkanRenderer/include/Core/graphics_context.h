@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/scene_data.h"
+
 #include <memory>
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
@@ -31,6 +33,8 @@ public:
 	VkQueue GetGraphicsQueue() const;
 	PersistentStagingBuffer& GetPersistentStagingBuffer() const;
 
+	SceneData::LightData& GetLightData();
+
 private:
 	void InitInstance();
 	void InitSurface(Window& window);
@@ -43,7 +47,7 @@ private:
 	void InitPipeline();
 	void InitTexture();
 	void InitMesh();
-	void InitCamera();
+	void InitSceneObjects();
 
 	std::unique_ptr<Impl> m_pImpl;
 };

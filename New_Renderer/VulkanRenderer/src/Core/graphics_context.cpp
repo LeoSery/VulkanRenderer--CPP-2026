@@ -14,6 +14,8 @@
 #include "GPU/mesh.h"
 #include "Loaders/obj_loader.h"
 #include "Core/camera.h"
+#include "Core/scene_data.h"
+#include "Loaders/image_loader.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -39,6 +41,7 @@ namespace
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::mat4 projection;
+		glm::vec4 cameraPos;
 	};
 }
 
@@ -100,6 +103,10 @@ struct GraphicsContext::Impl
 	// Camera
 	std::unique_ptr<Camera> camera;
 
+	// Lighting
+	SceneData::LightData lightData{};
+	std::unique_ptr<Buffer> lightUBO;
+
 	// Time
 	float lastTime = 0.0;
 
@@ -145,7 +152,7 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitTexture();
 	InitMesh();
 	InitPipeline();
-	InitCamera();
+	InitSceneObjects();
 
 	m_pImpl->lastTime = glfwGetTime(); // Initialize lastTime so the first deltaTime is near zero instead of the full init duration
 }
@@ -154,6 +161,7 @@ GraphicsContext::~GraphicsContext()
 {
 	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
 
+	m_pImpl->lightUBO.reset();
 	m_pImpl->descriptorSet.reset();
 	m_pImpl->descriptorPool.reset();
 	m_pImpl->sampler.reset();
@@ -298,6 +306,8 @@ void GraphicsContext::BeginFrame()
 	// Bind the graphics pipeline > Defines shaders and render states for the following draw calls
 	vkCmdBindPipeline(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetPipeline());
 	
+	m_pImpl->lightUBO->Upload(&m_pImpl->lightData, sizeof(SceneData::LightData));
+
 	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
 	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
@@ -312,6 +322,7 @@ void GraphicsContext::BeginFrame()
 	mvpData.model = m_pImpl->mesh->transform;
 	mvpData.view = m_pImpl->camera->GetViewMatrix();
 	mvpData.projection = m_pImpl->camera->GetProjectionMatrix(aspectRatio);
+	mvpData.cameraPos = glm::vec4(m_pImpl->camera->GetPosition(), 0.0f);
 
 	vkCmdPushConstants(frame.commandBuffer->GetCmd(), m_pImpl->pipeline->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MVPData), &mvpData);
 	
@@ -653,33 +664,19 @@ void GraphicsContext::InitPipeline()
 
 void GraphicsContext::InitTexture()
 {
-	// Generate a 64x64 checkerboard in RGBA
-	constexpr uint32_t size = 64;
-	std::vector<uint8_t> pixels(size * size * 4);
-
-	for (uint32_t y = 0; y < size; y++)
-	{
-		for (uint32_t x = 0; x < size; x++)
-		{
-			uint32_t idx = (y * size + x) * 4;
-			bool white = ((x / 8) + (y / 8)) % 2 == 0;
-			pixels[idx + 0] = white ? 255 : 0;   // R
-			pixels[idx + 1] = white ? 255 : 0;   // G
-			pixels[idx + 2] = white ? 255 : 0;   // B
-			pixels[idx + 3] = 255;               // A
-		}
-	}
+	// Load Mesh texture
+	ImageLoader::ImageData imageData = ImageLoader::Load("assets/Textures/FrogThisWay/Tx_Frogv1_D.jpg");
 
 	// Create Image
 	Image::CreateInfos imageCreateInfos{};
-	imageCreateInfos.width = size;
-	imageCreateInfos.height = size;
+	imageCreateInfos.width = imageData.width;
+	imageCreateInfos.height = imageData.height;
 	imageCreateInfos.format = VK_FORMAT_R8G8B8A8_SRGB;
 	imageCreateInfos.usage = Image::E_Usage::TransferDst | Image::E_Usage::Sampled;
 	imageCreateInfos.genMips = true;
 
 	m_pImpl->texture = std::make_unique<Image>(*this, imageCreateInfos);
-	m_pImpl->texture->Upload(pixels.data(), size, size);
+	m_pImpl->texture->Upload(imageData.pixels.data(), imageData.width, imageData.height);
 
 	// Create sampler
 	Sampler::CreateInfos samplerInfos{};
@@ -699,15 +696,36 @@ void GraphicsContext::InitTexture()
 
 void GraphicsContext::InitMesh()
 {
-	// Blender suzanne
-	m_pImpl->mesh = ObjLoader::Load(*this, "assets/Blender_Suzanne.obj");
+	// Frog Mesh from "FrogThisWay" game.
+	m_pImpl->mesh = ObjLoader::Load(*this, "assets/Meshs/FrogThisWay/Frog.obj"); 
 	m_pImpl->mesh->transform = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate the mesh to 180 for toward camera
 }
 
-void GraphicsContext::InitCamera()
+void GraphicsContext::InitSceneObjects()
 {
+	// Camera
 	Camera::CreateInfos cameraInfos{};
 	m_pImpl->camera = std::make_unique<Camera>(cameraInfos);
 	m_pImpl->camera->SetPosition({0.0f, 0.0f, -3.0f});
 	m_pImpl->camera->SetRotation(90.0f, 0.0f);
+
+	// Ligths
+	m_pImpl->lightData.lightDirection = glm::vec3(1.0f, 2.0f, -1.0f);
+	m_pImpl->lightData.ambientStrength = 0.15f;
+	m_pImpl->lightData.lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+	m_pImpl->lightData.specularStrength = 0.5f;
+	m_pImpl->lightData.shininess = 32.0f;
+
+	Buffer::CreateInfos lightBufferInfos{};
+	lightBufferInfos.sizeInBytes = sizeof(SceneData::LightData);
+	lightBufferInfos.usage = Buffer::E_Usage::UniformBuffer | Buffer::E_Usage::HostVisible;
+	m_pImpl->lightUBO = std::make_unique<Buffer>(*this, lightBufferInfos);
+
+	m_pImpl->lightUBO->Upload(&m_pImpl->lightData, sizeof(SceneData::LightData));
+	m_pImpl->descriptorSet->Bind<Buffer>(1, *m_pImpl->lightUBO);
+}
+
+SceneData::LightData& GraphicsContext::GetLightData()
+{
+	return m_pImpl->lightData;
 }

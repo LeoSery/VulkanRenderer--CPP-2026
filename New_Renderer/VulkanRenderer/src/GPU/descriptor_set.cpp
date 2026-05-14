@@ -6,22 +6,32 @@
 #include "Core/graphics_context.h"
 #include "Utils/VkCheck.h"
 
+#include <array>
+
 // Constructors && Destructors
 DescriptorSet::DescriptorSet(GraphicsContext& ctx, CreateInfos& infos) : m_ctx(&ctx)
 {
-	// 1. Create layout and descriptor set structure
-	VkDescriptorSetLayoutBinding samplerBindingInfos{};
-	samplerBindingInfos.binding = 0;
-	samplerBindingInfos.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerBindingInfos.descriptorCount = 1;
-	samplerBindingInfos.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	// 1. Create layout with two bindings :
+	//		- binding 0 : Combined image sampler (texture)
+	//		- binding 1 : Uniform buffer (ImGUI Data, uupdated each frame from CPU)
+	std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
 
-	VkDescriptorSetLayoutCreateInfo samplerLayoutInfos{};
-	samplerLayoutInfos.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	samplerLayoutInfos.bindingCount = 1;
-	samplerLayoutInfos.pBindings = &samplerBindingInfos;
+	bindings[0].binding = 0;
+	bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	bindings[0].descriptorCount = 1;
+	bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VK_CHECK(vkCreateDescriptorSetLayout(ctx.GetDevice(), &samplerLayoutInfos, nullptr, &m_descriptorSetLayout));
+	bindings[1].binding = 1;
+	bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	bindings[1].descriptorCount = 1;
+	bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfos{};
+	layoutInfos.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfos.bindingCount = static_cast<uint32_t>(bindings.size());
+	layoutInfos.pBindings = bindings.data();
+
+	VK_CHECK(vkCreateDescriptorSetLayout(ctx.GetDevice(), &layoutInfos, nullptr, &m_descriptorSetLayout));
 
 	// 2. Allocate the descriptor set from the pool
 	VkDescriptorSetAllocateInfo descriptorSetAllocationInfos{};

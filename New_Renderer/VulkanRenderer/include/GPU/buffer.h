@@ -17,6 +17,7 @@ public:
 		VertexBuffer = 1 << 2,
 		IndexBuffer = 1 << 3,
 		UniformBuffer = 1 << 4,
+		HostVisible = 1 << 5
 	};
 
 	struct CreateInfos

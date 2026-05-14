@@ -29,5 +29,9 @@ public:
 	glm::mat4 transform = glm::mat4(1.0f);
 
 	void Draw(VkCommandBuffer commandBuffer) const;
+
+	// Getters
+	int GetVertexCount() const;
+	int GetIndexCount() const;
 };
 

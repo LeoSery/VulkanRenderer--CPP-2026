@@ -1,5 +1,7 @@
 #include "Core/camera.h"
 
+#include <imgui.h>
+
 // Spherical coordinates formula: convert yaw/pitch angles to a 3D direction vector
 // forward.x = cos(yaw) * cos(pitch)
 // forward.y = sin(pitch)
@@ -29,6 +31,25 @@ Camera::Camera(const CreateInfos& createInfos) : m_fov(createInfos.fov), m_nearP
 
 void Camera::ProcessInput(GLFWwindow* window, float deltaTime)
 {
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS && m_isCameraActive)
+	{
+		m_isCameraActive = false;
+		m_firstMouse = true;
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+		return;
+	}
+
+	if (!m_isCameraActive)
+	{
+		bool isCursorOverImGuiPanel = ImGui::GetIO().WantCaptureMouse;
+		if (!isCursorOverImGuiPanel && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+		{
+			m_isCameraActive = true;
+			glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		}
+		return;
+	}
+
 	// Rotation (Mouse)
 	double newMouseX = 0.0f;
 	double newMouseY = 0.0f;
@@ -88,7 +109,7 @@ glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const
 
 glm::vec3 Camera::GetPosition() const
 {
-	return glm::vec3();
+	return m_position;
 }
 
 float Camera::GetFOV() const
@@ -111,6 +132,11 @@ float Camera::GetMoveSpeed() const
 	return m_moveSpeed;
 }
 
+bool Camera::IsCameraActive() const
+{
+	return m_isCameraActive;
+}
+
 void Camera::SetPosition(const glm::vec3& position)
 {
 	m_position = position;
@@ -125,4 +151,19 @@ void Camera::SetRotation(const float yaw, const float pitch)
 void Camera::SetMoveSpeed(float speed)
 {
 	m_moveSpeed = speed;
+}
+
+void Camera::SetFOV(float fov)
+{
+	m_fov = fov;
+}
+
+void Camera::SetNearPlane(float near)
+{
+	m_nearPlane = glm::clamp(near, 0.001f, m_farPlane - 0.01f);
+}
+
+void Camera::SetFarPlane(float far)
+{
+	m_farPlane = glm::max(far, m_nearPlane + 0.01f);
 }

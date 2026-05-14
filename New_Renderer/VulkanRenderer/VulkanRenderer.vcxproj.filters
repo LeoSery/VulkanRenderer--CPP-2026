@@ -43,6 +43,12 @@
     <Filter Include="Fichiers sources\Loaders">
       <UniqueIdentifier>{227943d8-1578-42c3-ad04-265d1e5ecc18}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Fichiers d%27en-tête\Debug">
+      <UniqueIdentifier>{1acd1cf6-5d9e-462d-99ee-c259e042d0a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fichiers sources\Debug">
+      <UniqueIdentifier>{f5f0dec8-96ef-4258-9075-ffdd0ad61718}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -102,6 +108,9 @@
     <ClCompile Include="src\Loaders\image_loader.cpp">
       <Filter>Fichiers sources\Loaders</Filter>
     </ClCompile>
+    <ClCompile Include="src\Debug\ui.cpp">
+      <Filter>Fichiers sources\Debug</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Core\window.h">
@@ -157,6 +166,9 @@
     </ClInclude>
     <ClInclude Include="include\Loaders\image_loader.h">
       <Filter>Fichiers d%27en-tête\Loaders</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Debug\ui.h">
+      <Filter>Fichiers d%27en-tête\Debug</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

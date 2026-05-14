@@ -16,6 +16,7 @@
 #include "Core/camera.h"
 #include "Core/scene_data.h"
 #include "Loaders/image_loader.h"
+#include "Debug/ui.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -112,6 +113,7 @@ struct GraphicsContext::Impl
 
 	// Window
 	GLFWwindow* window = nullptr;
+	std::unique_ptr<UI> ui;
 };
 
 // Query the GPU for the best supported depth format
@@ -153,6 +155,7 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitMesh();
 	InitPipeline();
 	InitSceneObjects();
+	InitDebugUI();
 
 	m_pImpl->lastTime = glfwGetTime(); // Initialize lastTime so the first deltaTime is near zero instead of the full init duration
 }
@@ -161,6 +164,7 @@ GraphicsContext::~GraphicsContext()
 {
 	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
 
+	m_pImpl->ui.reset();
 	m_pImpl->lightUBO.reset();
 	m_pImpl->descriptorSet.reset();
 	m_pImpl->descriptorPool.reset();
@@ -222,6 +226,9 @@ void GraphicsContext::BeginFrame()
 
 	// Input
 	m_pImpl->camera->ProcessInput(m_pImpl->window, deltaTime);
+
+	// UI
+	m_pImpl->ui->BeginFrame(m_pImpl->swapchainExtent);
 
 	auto& frame = m_pImpl->frames[m_pImpl->currentFrame];
 	auto& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
@@ -315,7 +322,7 @@ void GraphicsContext::BeginFrame()
 	float aspectRatio = 0.0f;
 	aspectRatio = (static_cast<float>(m_pImpl->swapchainExtent.width) / (static_cast<float>(m_pImpl->swapchainExtent.height)));
 
-	// Set the MVP (Model/View /Projection) data
+	// Set the MVP (Model/View/Projection) data
 	// Build MVP matrices and push them to the vertex shader via push constants
 	// model: object transform | view: camera | projection: perspective
 	MVPData mvpData{};
@@ -329,6 +336,36 @@ void GraphicsContext::BeginFrame()
 	m_pImpl->mesh->Draw(frame.commandBuffer->GetCmd());
 
 	vkCmdEndRendering(frame.commandBuffer->GetCmd());
+
+	VkImageMemoryBarrier2 sceneToUIBarrierInfos{};
+	sceneToUIBarrierInfos.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+	sceneToUIBarrierInfos.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	sceneToUIBarrierInfos.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+	sceneToUIBarrierInfos.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	sceneToUIBarrierInfos.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+	sceneToUIBarrierInfos.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	sceneToUIBarrierInfos.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	sceneToUIBarrierInfos.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	sceneToUIBarrierInfos.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	sceneToUIBarrierInfos.image = m_pImpl->backbuffer->GetVkImage();
+	sceneToUIBarrierInfos.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	sceneToUIBarrierInfos.subresourceRange.baseMipLevel = 0;
+	sceneToUIBarrierInfos.subresourceRange.levelCount = 1;
+	sceneToUIBarrierInfos.subresourceRange.baseArrayLayer = 0;
+	sceneToUIBarrierInfos.subresourceRange.layerCount = 1;
+
+	VkDependencyInfo sceneToUIDependencyInfos{};
+	sceneToUIDependencyInfos.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+	sceneToUIDependencyInfos.imageMemoryBarrierCount = 1;
+	sceneToUIDependencyInfos.pImageMemoryBarriers = &sceneToUIBarrierInfos;
+
+	vkCmdPipelineBarrier2(frame.commandBuffer->GetCmd(), &sceneToUIDependencyInfos);
+
+	m_pImpl->ui->Render(
+		frame.commandBuffer->GetCmd(),
+		m_pImpl->backbuffer->GetVkImageView(),
+		m_pImpl->swapchainExtent
+	);
 }
 
 void GraphicsContext::EndFrame()
@@ -723,9 +760,41 @@ void GraphicsContext::InitSceneObjects()
 
 	m_pImpl->lightUBO->Upload(&m_pImpl->lightData, sizeof(SceneData::LightData));
 	m_pImpl->descriptorSet->Bind<Buffer>(1, *m_pImpl->lightUBO);
+
+	glfwSetInputMode(m_pImpl->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+}
+
+void GraphicsContext::InitDebugUI()
+{
+	UI::CreateInfos userInterfaceInfos{};
+	userInterfaceInfos.instance = m_pImpl->vkbInstance.instance;
+	userInterfaceInfos.physicalDevice = m_pImpl->physicalDevice;
+	userInterfaceInfos.device = m_pImpl->device;
+	userInterfaceInfos.graphicsQueue = m_pImpl->graphicsQueue;
+	userInterfaceInfos.queueFamily = m_pImpl->graphicsQueueFamily;
+	userInterfaceInfos.imageCount = m_pImpl->vkbSwapchain.image_count;
+	userInterfaceInfos.colorFormat = BACKBUFFER_FORMAT;
+	userInterfaceInfos.window = m_pImpl->window;
+
+	UI::SceneReferences userInterfaceSceneReferences{};
+	userInterfaceSceneReferences.camera = m_pImpl->camera.get();
+	userInterfaceSceneReferences.meshes.push_back(m_pImpl->mesh.get());
+	userInterfaceSceneReferences.lights.push_back(&m_pImpl->lightData);
+
+	m_pImpl->ui = std::make_unique<UI>(userInterfaceInfos, userInterfaceSceneReferences);
 }
 
 SceneData::LightData& GraphicsContext::GetLightData()
 {
 	return m_pImpl->lightData;
+}
+
+Camera& GraphicsContext::GetCamera()
+{
+	return *m_pImpl->camera;
+}
+
+Mesh& GraphicsContext::GetMesh()
+{
+	return *m_pImpl->mesh;
 }

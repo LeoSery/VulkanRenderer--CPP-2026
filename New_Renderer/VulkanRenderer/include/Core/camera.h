@@ -34,11 +34,16 @@ public:
 	float GetNearPlane() const;
 	float GetFarPlane() const;
 	float GetMoveSpeed() const;
+	
+	bool IsCameraActive() const;
 
 	// Setters
 	void SetPosition(const glm::vec3& position);
 	void SetRotation(const float yaw, const float pitch);
 	void SetMoveSpeed(float speed);
+	void SetFOV(float fov);
+	void SetNearPlane(float near);
+	void SetFarPlane(float far);
 
 private:
 	float m_fov;
@@ -54,5 +59,6 @@ private:
 	bool m_firstMouse = true;
 	double m_lastMouseX = 0.0f;
 	double m_lastMouseY = 0.0f;
+	bool m_isCameraActive = false;
 };
 

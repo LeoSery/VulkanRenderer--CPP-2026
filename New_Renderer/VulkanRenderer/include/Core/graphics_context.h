@@ -9,6 +9,8 @@
 class Window;
 class CommandPool;
 class PersistentStagingBuffer;
+class Camera;
+class Mesh;
 
 static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 static constexpr VkFormat BACKBUFFER_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -34,6 +36,8 @@ public:
 	PersistentStagingBuffer& GetPersistentStagingBuffer() const;
 
 	SceneData::LightData& GetLightData();
+	Camera& GetCamera();
+	Mesh& GetMesh();
 
 private:
 	void InitInstance();
@@ -48,6 +52,7 @@ private:
 	void InitTexture();
 	void InitMesh();
 	void InitSceneObjects();
+	void InitDebugUI();
 
 	std::unique_ptr<Impl> m_pImpl;
 };

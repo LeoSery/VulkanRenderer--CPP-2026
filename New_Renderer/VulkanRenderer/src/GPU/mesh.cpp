@@ -32,3 +32,25 @@ void Mesh::Draw(VkCommandBuffer commandBuffer) const
 		vkCmdDrawIndexed(commandBuffer, primitive.indexCount, 1, primitive.startIndex, 0, 0);
 	}
 }
+
+int Mesh::GetVertexCount() const
+{
+	if (vertexBuffers[0])
+	{
+		return static_cast<int>(vertexBuffers[0]->GetSize() / sizeof(glm::vec3));
+	}
+
+	return 0;
+}
+
+int Mesh::GetIndexCount() const
+{
+	int result = 0;
+
+	for (auto& primitive : primitives)
+	{
+		result += primitive.indexCount;
+	}
+
+	return result;
+}

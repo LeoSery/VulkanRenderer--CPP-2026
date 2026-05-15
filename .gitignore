@@ -132,4 +132,4 @@ vk_layer_settings.txt
 *.spv
 
 # vcpkg installed packages (generated from vcpkg.json)
-New_Renderer/vcpkg_installed/
+vcpkg_installed/

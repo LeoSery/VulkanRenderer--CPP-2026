@@ -23,19 +23,13 @@ public:
 
 	void ProcessInput(GLFWwindow* window, float deltaTime);
 
-	// Gettes
-	glm::vec3 GetForwardVector() const;
-	glm::vec3 GetRightVector() const;
-	glm::mat4 GetViewMatrix() const;
-	glm::mat4 GetProjectionMatrix(float aspectRatio) const;
-	glm::vec3 GetPosition() const;
-
-	float GetFOV() const;
-	float GetNearPlane() const;
-	float GetFarPlane() const;
-	float GetMoveSpeed() const;
-	
-	bool IsCameraActive() const;
+	// Getters
+	inline glm::vec3 GetPosition() const { return m_position; }
+	inline float GetFOV() const { return m_fov;  }
+	inline float GetNearPlane() const { return m_nearPlane; }
+	inline float GetFarPlane() const { return m_farPlane; }
+	inline float GetMoveSpeed() const { return m_moveSpeed; }
+	inline bool GetCameraIsActive() const { return m_isCameraActive; }
 
 	// Setters
 	void SetPosition(const glm::vec3& position);
@@ -44,6 +38,12 @@ public:
 	void SetFOV(float fov);
 	void SetNearPlane(float near);
 	void SetFarPlane(float far);
+
+	// Methods
+	glm::vec3 GetForwardVector() const;
+	glm::vec3 GetRightVector() const;
+	glm::mat4 GetViewMatrix() const;
+	glm::mat4 GetProjectionMatrix(float aspectRatio) const;
 
 private:
 	float m_fov;
@@ -57,8 +57,7 @@ private:
 	float m_pitch = 0.0f;
 
 	bool m_firstMouse = true;
-	double m_lastMouseX = 0.0f;
-	double m_lastMouseY = 0.0f;
+	float m_lastMouseX = 0.0f;
+	float m_lastMouseY = 0.0f;
 	bool m_isCameraActive = false;
 };
-

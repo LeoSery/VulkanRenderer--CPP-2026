@@ -11,12 +11,13 @@
 #include "GPU/descriptor_set.h"
 #include "GPU/Buffer.h"
 #include "GPU/persistent_staging_buffer.h"
-#include "GPU/mesh.h"
-#include "Loaders/obj_loader.h"
-#include "Core/camera.h"
 #include "Core/scene_data.h"
-#include "Loaders/image_loader.h"
 #include "Debug/ui.h"
+#include "Core/scene.h"
+#include "Core/render_object.h"
+#include "Core/camera.h"
+#include "GPU/mesh.h"
+#include "Core/light.h"
 
 #include <vulkan/vulkan.h>
 #include <VkBootstrap.h>
@@ -54,7 +55,9 @@ struct FrameData
 
 struct GraphicsContext::Impl
 {
-	// Instance & device
+	//
+	// Vulkan Core
+	//
 	vkb::Instance vkbInstance;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -62,56 +65,58 @@ struct GraphicsContext::Impl
 	VkQueue graphicsQueue = VK_NULL_HANDLE;
 	uint32_t graphicsQueueFamily = 0;
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
-
-	// Memory
 	VmaAllocator allocator = VK_NULL_HANDLE;
 
+	//
 	// Swapchain
+	//
 	vkb::Swapchain vkbSwapchain;
 	std::vector<std::unique_ptr<Image>> swapchainImages;
 	VkExtent2D swapchainExtent{};
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 
+	//
 	// Render targets
+	//
 	std::unique_ptr<Image> backbuffer;
 	std::unique_ptr<Image> depthbuffer;
 	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
-	// Pool and FrameData
+	//
+	// Frame data
+	//
 	std::unique_ptr<CommandPool> commandPool;
 	std::array<FrameData, FRAMES_IN_FLIGHT> frames;
 	std::array<std::unique_ptr<CommandEncoder>, FRAMES_IN_FLIGHT> encoders;
 	uint32_t currentFrame = 0;
 	uint32_t swapchainImageIndex = 0;
 
+	//
+	// Descriptors
+	// 
+	std::unique_ptr<DescriptorPool> descriptorPool;
+	std::array<std::unique_ptr<Buffer>, FRAMES_IN_FLIGHT> sceneUBOs;
+	std::array<std::unique_ptr<DescriptorSet>, FRAMES_IN_FLIGHT> sceneDescriptorSets;
+	SceneData::SceneUBOData sceneUBOData;
+	std::unique_ptr<DescriptorSet> objectDescriptorSetPrototype;
+
+	//
 	// Pipeline
+	//
 	std::unique_ptr<Shader> vertexShader;
 	std::unique_ptr<Shader> fragmentShader;
 	std::unique_ptr<Pipeline> pipeline;
 
-	// Texture
-	std::unique_ptr<Image> texture;
-	std::unique_ptr<Sampler> sampler;
-	std::unique_ptr<DescriptorPool> descriptorPool;
-	std::unique_ptr<DescriptorSet> descriptorSet;
-
-	// Mesh
-	std::unique_ptr<Mesh> mesh;
-
-	// Buffer
+	//
+	// Utilities
+	//
 	std::unique_ptr<PersistentStagingBuffer> stagingBuffer;
+	double lastTime = 0.0;
+	float deltaTime = 0.0;
 
-	// Camera
-	std::unique_ptr<Camera> camera;
-
-	// Lighting
-	SceneData::LightData lightData{};
-	std::unique_ptr<Buffer> lightUBO;
-
-	// Time
-	float lastTime = 0.0;
-
+	//
 	// Window
+	//
 	GLFWwindow* window = nullptr;
 	std::unique_ptr<UI> ui;
 };
@@ -147,14 +152,13 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitSurface(window);
 	InitDevice();
 	InitAllocator();
+	InitPersistentBuffer();
 	InitSwapchain(window);
 	InitImages();
 	InitFrameData();
-	InitPersistentBuffer();
-	InitTexture();
-	InitMesh();
+	InitDesccriptorPool();
+	InitSceneDescriptors();
 	InitPipeline();
-	InitSceneObjects();
 	InitDebugUI();
 
 	m_pImpl->lastTime = glfwGetTime(); // Initialize lastTime so the first deltaTime is near zero instead of the full init duration
@@ -164,12 +168,19 @@ GraphicsContext::~GraphicsContext()
 {
 	vkDeviceWaitIdle(m_pImpl->device); // Wait for the GPU to finish all pending work before destroying anything
 
+	for (auto& set : m_pImpl->sceneDescriptorSets)
+	{
+		set.reset();
+	}
+	m_pImpl->objectDescriptorSetPrototype.reset();
+
+	for (auto& ubo : m_pImpl->sceneUBOs)
+	{
+		ubo.reset();
+	}
+
 	m_pImpl->ui.reset();
-	m_pImpl->lightUBO.reset();
-	m_pImpl->descriptorSet.reset();
 	m_pImpl->descriptorPool.reset();
-	m_pImpl->sampler.reset();
-	m_pImpl->texture.reset();
 
 	m_pImpl->pipeline.reset();
 	m_pImpl->vertexShader.reset();
@@ -199,7 +210,6 @@ GraphicsContext::~GraphicsContext()
 	m_pImpl->commandPool.reset();
 
 	// Image
-	m_pImpl->mesh.reset();
 	m_pImpl->backbuffer.reset();
 	m_pImpl->depthbuffer.reset();
 	m_pImpl->stagingBuffer.reset();
@@ -223,9 +233,7 @@ void GraphicsContext::BeginFrame()
 	double currentTime = glfwGetTime();
 	float deltaTime = static_cast<float>(currentTime - m_pImpl->lastTime);
 	m_pImpl->lastTime = currentTime;
-
-	// Input
-	m_pImpl->camera->ProcessInput(m_pImpl->window, deltaTime);
+	m_pImpl->deltaTime = deltaTime;
 
 	// UI
 	m_pImpl->ui->BeginFrame(m_pImpl->swapchainExtent);
@@ -312,28 +320,55 @@ void GraphicsContext::BeginFrame()
 
 	// Bind the graphics pipeline > Defines shaders and render states for the following draw calls
 	vkCmdBindPipeline(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetPipeline());
-	
-	m_pImpl->lightUBO->Upload(&m_pImpl->lightData, sizeof(SceneData::LightData));
 
-	VkDescriptorSet descriptorSet = m_pImpl->descriptorSet->GetVkDescriptorSet();
-	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &descriptorSet, 0, nullptr);
+	VkDescriptorSet sceneSet = m_pImpl->sceneDescriptorSets[m_pImpl->currentFrame]->GetVkDescriptorSet();
+	vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 0, 1, &sceneSet, 0, nullptr);
+}
 
-	// Compute aspect ratio from swapchain extent to avoid distortion on non-square windows
-	float aspectRatio = 0.0f;
-	aspectRatio = (static_cast<float>(m_pImpl->swapchainExtent.width) / (static_cast<float>(m_pImpl->swapchainExtent.height)));
+void GraphicsContext::RenderScene(Scene& scene)
+{
+	FrameData& frame = m_pImpl->frames[m_pImpl->currentFrame];
+	Camera& camera = scene.GetCamera();
 
-	// Set the MVP (Model/View/Projection) data
-	// Build MVP matrices and push them to the vertex shader via push constants
-	// model: object transform | view: camera | projection: perspective
-	MVPData mvpData{};
-	mvpData.model = m_pImpl->mesh->transform;
-	mvpData.view = m_pImpl->camera->GetViewMatrix();
-	mvpData.projection = m_pImpl->camera->GetProjectionMatrix(aspectRatio);
-	mvpData.cameraPos = glm::vec4(m_pImpl->camera->GetPosition(), 0.0f);
+	float aspectRatio = static_cast<float>(m_pImpl->swapchainExtent.width) / static_cast<float>(m_pImpl->swapchainExtent.height);
 
-	vkCmdPushConstants(frame.commandBuffer->GetCmd(), m_pImpl->pipeline->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MVPData), &mvpData);
-	
-	m_pImpl->mesh->Draw(frame.commandBuffer->GetCmd());
+	const auto& lights = scene.GetLights();
+	m_pImpl->sceneUBOData.numberLights = static_cast<int>(lights.size());
+
+	for (int i = 0; i < static_cast<int>(lights.size()) && i < SceneData::MAX_LIGHTS; i++)
+	{
+		m_pImpl->sceneUBOData.lights[i] = lights[i]->PrepareDataForGPUFormat();
+	}
+
+	m_pImpl->sceneUBOs[m_pImpl->currentFrame]->Upload(&m_pImpl->sceneUBOData, sizeof(SceneData::SceneUBOData));
+
+	for (const auto& object : scene.GetObjects())
+	{
+		if (!object->GetMesh() || !object->GetDescriptorSet())
+		{
+			continue;
+		}
+
+		VkDescriptorSet objectDescriptorSet = object->GetDescriptorSet()->GetVkDescriptorSet();
+		vkCmdBindDescriptorSets(frame.commandBuffer->GetCmd(), VK_PIPELINE_BIND_POINT_GRAPHICS, m_pImpl->pipeline->GetLayout(), 1, 1, &objectDescriptorSet, 0, nullptr);
+
+		MVPData ObjectMVPData{};
+		ObjectMVPData.model = object->GetTransform();
+		ObjectMVPData.view = camera.GetViewMatrix();
+		ObjectMVPData.projection = camera.GetProjectionMatrix(aspectRatio);
+		ObjectMVPData.cameraPos = glm::vec4(camera.GetPosition(), 0.0f);
+
+		vkCmdPushConstants(frame.commandBuffer->GetCmd(), m_pImpl->pipeline->GetLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MVPData), &ObjectMVPData);
+
+		object->GetMesh()->Draw(frame.commandBuffer->GetCmd());
+	}
+}
+
+void GraphicsContext::EndFrame()
+{
+	FrameData& frame = m_pImpl->frames[m_pImpl->currentFrame];
+	std::unique_ptr<CommandEncoder>& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
+	Image& swapchainImage = *m_pImpl->swapchainImages[m_pImpl->swapchainImageIndex];
 
 	vkCmdEndRendering(frame.commandBuffer->GetCmd());
 
@@ -366,13 +401,6 @@ void GraphicsContext::BeginFrame()
 		m_pImpl->backbuffer->GetVkImageView(),
 		m_pImpl->swapchainExtent
 	);
-}
-
-void GraphicsContext::EndFrame()
-{
-	FrameData& frame = m_pImpl->frames[m_pImpl->currentFrame];
-	std::unique_ptr<CommandEncoder>& encoder = m_pImpl->encoders[m_pImpl->currentFrame];
-	Image& swapchainImage = *m_pImpl->swapchainImages[m_pImpl->swapchainImageIndex];
 
 	// Transition backbuffer layout to TransferSrc so it can be used as blit source
 	encoder->TransitionImageLayout(
@@ -489,6 +517,26 @@ PersistentStagingBuffer& GraphicsContext::GetPersistentStagingBuffer() const
 	return *m_pImpl->stagingBuffer;
 }
 
+DescriptorPool& GraphicsContext::GetDescriptorPool() const
+{
+	return *m_pImpl->descriptorPool;
+}
+
+float GraphicsContext::GetDeltaTime() const
+{
+	return m_pImpl->deltaTime;
+}
+
+void GraphicsContext::SetScene(Scene& scene)
+{
+	m_pImpl->ui->SetScene(&scene);
+}
+
+void GraphicsContext::WaitIdle() const
+{
+	vkDeviceWaitIdle(m_pImpl->device);
+}
+
 void GraphicsContext::InitInstance()
 {
 	vkb::InstanceBuilder builder;
@@ -512,7 +560,7 @@ void GraphicsContext::InitInstance()
 void GraphicsContext::InitSurface(Window& window)
 {
 	m_pImpl->window = window.GetHandle();
-	glfwSetInputMode(m_pImpl->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwSetInputMode(m_pImpl->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
 	VK_CHECK(glfwCreateWindowSurface(
 		m_pImpl->vkbInstance.instance,
@@ -684,6 +732,54 @@ void GraphicsContext::InitFrameData()
 	}
 }
 
+void GraphicsContext::InitDesccriptorPool()
+{
+	DescriptorPool::CreateInfos descriptorPoolInfos{};
+	descriptorPoolInfos.maxSets = 32;
+	descriptorPoolInfos.maxCombinedImageSamplers = 16;
+	descriptorPoolInfos.maxUniformBuffers = FRAMES_IN_FLIGHT + 4;
+
+	m_pImpl->descriptorPool = std::make_unique<DescriptorPool>(*this, descriptorPoolInfos);
+}
+
+void GraphicsContext::InitSceneDescriptors()
+{
+	// Binding set = 0 : Scene UBO
+	VkDescriptorSetLayoutBinding sceneUBOBinding{};
+	sceneUBOBinding.binding = 0;
+	sceneUBOBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	sceneUBOBinding.descriptorCount = 1;
+	sceneUBOBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	// Binding set = 1 : Texture sampler
+	VkDescriptorSetLayoutBinding objectSamplerBinding{};
+	objectSamplerBinding.binding = 0;
+	objectSamplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	objectSamplerBinding.descriptorCount = 1;
+	objectSamplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++)
+	{
+		Buffer::CreateInfos UBOInfos{};
+		UBOInfos.sizeInBytes = sizeof(SceneData::SceneUBOData);
+		UBOInfos.usage = Buffer::E_Usage::UniformBuffer | Buffer::E_Usage::HostVisible;
+		m_pImpl->sceneUBOs[i] = std::make_unique<Buffer>(*this, UBOInfos);
+
+		DescriptorSet::CreateInfos descriptorSetInfos{};
+		descriptorSetInfos.pool = m_pImpl->descriptorPool.get();
+		descriptorSetInfos.bindings = { sceneUBOBinding };
+		m_pImpl->sceneDescriptorSets[i] = std::make_unique<DescriptorSet>(*this, descriptorSetInfos);
+		m_pImpl->sceneDescriptorSets[i]->Bind<Buffer>(0, *m_pImpl->sceneUBOs[i]);
+	}
+
+	// set=1 prototype: used exclusively to provide its VkDescriptorSetLayout to the pipeline
+	// No images are bound to it, it is not used for rendering
+	DescriptorSet::CreateInfos descriptorSetPrototypeInfos{};
+	descriptorSetPrototypeInfos.pool = m_pImpl->descriptorPool.get();
+	descriptorSetPrototypeInfos.bindings = { objectSamplerBinding };
+	m_pImpl->objectDescriptorSetPrototype = std::make_unique<DescriptorSet>(*this, descriptorSetPrototypeInfos);
+}
+
 void GraphicsContext::InitPipeline()
 {
 	m_pImpl->vertexShader = std::make_unique<Shader>(*this, "shaders/basic.vert.spv", ShaderStage::Vertex);
@@ -696,72 +792,12 @@ void GraphicsContext::InitPipeline()
 	MVPRangeInfos.offset = 0;
 	MVPRangeInfos.size = sizeof(MVPData);
 
-	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader, *m_pImpl->descriptorSet, m_pImpl->depthFormat, MVPRangeInfos);
-}
+	std::vector<VkDescriptorSetLayout> descriptorSetlayouts = {
+		m_pImpl->sceneDescriptorSets[0]->GetVkDescriptorSetLayout(),	   // set = 0
+		m_pImpl->objectDescriptorSetPrototype->GetVkDescriptorSetLayout()  // set = 1
+	};
 
-void GraphicsContext::InitTexture()
-{
-	// Load Mesh texture
-	ImageLoader::ImageData imageData = ImageLoader::Load("assets/Textures/FrogThisWay/Tx_Frogv1_D.jpg");
-
-	// Create Image
-	Image::CreateInfos imageCreateInfos{};
-	imageCreateInfos.width = imageData.width;
-	imageCreateInfos.height = imageData.height;
-	imageCreateInfos.format = VK_FORMAT_R8G8B8A8_SRGB;
-	imageCreateInfos.usage = Image::E_Usage::TransferDst | Image::E_Usage::Sampled;
-	imageCreateInfos.genMips = true;
-
-	m_pImpl->texture = std::make_unique<Image>(*this, imageCreateInfos);
-	m_pImpl->texture->Upload(imageData.pixels.data(), imageData.width, imageData.height);
-
-	// Create sampler
-	Sampler::CreateInfos samplerInfos{};
-	m_pImpl->sampler = std::make_unique<Sampler>(*this, samplerInfos);
-
-	// Create DescriptorPool
-	DescriptorPool::CreateInfos descriptorPoolCreateInfos{};
-	m_pImpl->descriptorPool = std::make_unique<DescriptorPool>(*this, descriptorPoolCreateInfos);
-
-	// Create DescriptorSet
-	DescriptorSet::CreateInfos descriptorSetCreateInfos{};
-	descriptorSetCreateInfos.pool = m_pImpl->descriptorPool.get();
-
-	m_pImpl->descriptorSet = std::make_unique<DescriptorSet>(*this, descriptorSetCreateInfos);
-	m_pImpl->descriptorSet->Bind<Image>(0, *m_pImpl->texture, m_pImpl->sampler.get());
-}
-
-void GraphicsContext::InitMesh()
-{
-	// Frog Mesh from "FrogThisWay" game.
-	m_pImpl->mesh = ObjLoader::Load(*this, "assets/Meshs/FrogThisWay/Frog.obj"); 
-	m_pImpl->mesh->transform = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate the mesh to 180 for toward camera
-}
-
-void GraphicsContext::InitSceneObjects()
-{
-	// Camera
-	Camera::CreateInfos cameraInfos{};
-	m_pImpl->camera = std::make_unique<Camera>(cameraInfos);
-	m_pImpl->camera->SetPosition({0.0f, 0.0f, -3.0f});
-	m_pImpl->camera->SetRotation(90.0f, 0.0f);
-
-	// Ligths
-	m_pImpl->lightData.lightDirection = glm::vec3(1.0f, 2.0f, -1.0f);
-	m_pImpl->lightData.ambientStrength = 0.15f;
-	m_pImpl->lightData.lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
-	m_pImpl->lightData.specularStrength = 0.5f;
-	m_pImpl->lightData.shininess = 32.0f;
-
-	Buffer::CreateInfos lightBufferInfos{};
-	lightBufferInfos.sizeInBytes = sizeof(SceneData::LightData);
-	lightBufferInfos.usage = Buffer::E_Usage::UniformBuffer | Buffer::E_Usage::HostVisible;
-	m_pImpl->lightUBO = std::make_unique<Buffer>(*this, lightBufferInfos);
-
-	m_pImpl->lightUBO->Upload(&m_pImpl->lightData, sizeof(SceneData::LightData));
-	m_pImpl->descriptorSet->Bind<Buffer>(1, *m_pImpl->lightUBO);
-
-	glfwSetInputMode(m_pImpl->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	m_pImpl->pipeline = std::make_unique<Pipeline>(*this, *m_pImpl->vertexShader, *m_pImpl->fragmentShader, descriptorSetlayouts, m_pImpl->depthFormat, MVPRangeInfos);
 }
 
 void GraphicsContext::InitDebugUI()
@@ -776,25 +812,5 @@ void GraphicsContext::InitDebugUI()
 	userInterfaceInfos.colorFormat = BACKBUFFER_FORMAT;
 	userInterfaceInfos.window = m_pImpl->window;
 
-	UI::SceneReferences userInterfaceSceneReferences{};
-	userInterfaceSceneReferences.camera = m_pImpl->camera.get();
-	userInterfaceSceneReferences.meshes.push_back(m_pImpl->mesh.get());
-	userInterfaceSceneReferences.lights.push_back(&m_pImpl->lightData);
-
-	m_pImpl->ui = std::make_unique<UI>(userInterfaceInfos, userInterfaceSceneReferences);
-}
-
-SceneData::LightData& GraphicsContext::GetLightData()
-{
-	return m_pImpl->lightData;
-}
-
-Camera& GraphicsContext::GetCamera()
-{
-	return *m_pImpl->camera;
-}
-
-Mesh& GraphicsContext::GetMesh()
-{
-	return *m_pImpl->mesh;
+	m_pImpl->ui = std::make_unique<UI>(userInterfaceInfos);
 }

@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
+#include <array>
+#include <vector>
 
 class GraphicsContext;
 class DescriptorPool;
@@ -15,6 +17,7 @@ public:
 	struct CreateInfos
 	{
 		DescriptorPool* pool = nullptr;
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
 	};
 
 	explicit DescriptorSet(GraphicsContext& ctx, CreateInfos& infos);

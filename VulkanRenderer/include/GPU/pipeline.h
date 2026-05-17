@@ -3,15 +3,15 @@
 #include <vulkan/vulkan.h>
 
 #include <memory>
+#include <vector>
 
 class GraphicsContext;
 class Shader;
-class DescriptorSet;
 
 class Pipeline
 {
 public:
-	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet, VkFormat depthFormat = VK_FORMAT_UNDEFINED, VkPushConstantRange pushConstantRange = {});
+	Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkFormat depthFormat = VK_FORMAT_UNDEFINED, VkPushConstantRange pushConstantRange = {});
 	~Pipeline();
 
 	Pipeline(const Pipeline&) = delete;

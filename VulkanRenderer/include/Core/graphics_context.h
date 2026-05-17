@@ -1,7 +1,5 @@
 #pragma once
 
-#include "Core/scene_data.h"
-
 #include <memory>
 #include <vulkan/vulkan.h>
 #include <vma/vk_mem_alloc.h>
@@ -9,8 +7,8 @@
 class Window;
 class CommandPool;
 class PersistentStagingBuffer;
-class Camera;
-class Mesh;
+class Scene;
+class DescriptorPool;
 
 static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 static constexpr VkFormat BACKBUFFER_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -22,6 +20,7 @@ public:
 	~GraphicsContext();
 
 	void BeginFrame();
+	void RenderScene(Scene& scene);
 	void EndFrame();
 
 	struct Impl;
@@ -34,10 +33,11 @@ public:
 	CommandPool& GetCommandPool() const;
 	VkQueue GetGraphicsQueue() const;
 	PersistentStagingBuffer& GetPersistentStagingBuffer() const;
+	DescriptorPool& GetDescriptorPool() const;
 
-	SceneData::LightData& GetLightData();
-	Camera& GetCamera();
-	Mesh& GetMesh();
+	float GetDeltaTime() const;
+	void SetScene(Scene& scene);
+	void WaitIdle() const;
 
 private:
 	void InitInstance();
@@ -48,10 +48,9 @@ private:
 	void InitSwapchain(Window& window);
 	void InitImages();
 	void InitFrameData();
+	void InitDesccriptorPool();
+	void InitSceneDescriptors();
 	void InitPipeline();
-	void InitTexture();
-	void InitMesh();
-	void InitSceneObjects();
 	void InitDebugUI();
 
 	std::unique_ptr<Impl> m_pImpl;

@@ -6,6 +6,7 @@ Window::Window(int width, int height, const std::string& title) : m_width(width)
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	m_handle = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+	glfwSetInputMode(m_handle, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 }
 
 Window::~Window()

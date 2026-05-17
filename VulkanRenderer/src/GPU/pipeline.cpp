@@ -2,7 +2,6 @@
 #include "GPU/shader.h"
 #include "Core/graphics_context.h"
 #include "Utils/VkCheck.h"
-#include "GPU/Descriptor_set.h"
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>
@@ -15,16 +14,14 @@ struct Pipeline::Impl
 	VkPipeline pipeline = VK_NULL_HANDLE;
 };
 
-Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, DescriptorSet& descriptorSet, VkFormat depthFormat, VkPushConstantRange pushConstantRange) : m_pImpl(std::make_unique<Impl>())
+Pipeline::Pipeline(GraphicsContext& ctx, Shader& vertexShader, Shader& fragmentShader, const std::vector<VkDescriptorSetLayout>& descriptorSetLayouts, VkFormat depthFormat, VkPushConstantRange pushConstantRange) : m_pImpl(std::make_unique<Impl>())
 {
 	m_pImpl->device = ctx.GetDevice();
 
-	VkDescriptorSetLayout descriptorSetLayout = descriptorSet.GetVkDescriptorSetLayout();
-
 	VkPipelineLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	layoutInfo.setLayoutCount = 1;
-	layoutInfo.pSetLayouts = &descriptorSetLayout;
+	layoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
+	layoutInfo.pSetLayouts = descriptorSetLayouts.empty() ? nullptr : descriptorSetLayouts.data();
 	layoutInfo.pushConstantRangeCount = (pushConstantRange.size > 0) ? 1 : 0;
 	layoutInfo.pPushConstantRanges = (pushConstantRange.size > 0) ? &pushConstantRange : nullptr;
 

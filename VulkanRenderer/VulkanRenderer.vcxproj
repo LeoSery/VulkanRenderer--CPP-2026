@@ -129,7 +129,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SPIRV_REFLECT_USE_SYSTEM_SPIRV_H</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -147,7 +147,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SPIRV_REFLECT_USE_SYSTEM_SPIRV_H</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(SolutionDir)external\include;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -163,7 +163,10 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Core\camera.cpp" />
     <ClCompile Include="src\Core\graphics_context.cpp" />
-    <ClCompile Include="src\Core\scene_data.cpp" />
+    <ClCompile Include="src\Core\graphics_renderer.cpp" />
+    <ClCompile Include="src\Core\light.cpp" />
+    <ClCompile Include="src\Core\render_object.cpp" />
+    <ClCompile Include="src\Core\scene.cpp" />
     <ClCompile Include="src\Core\window.cpp" />
     <ClCompile Include="src\Debug\ui.cpp" />
     <ClCompile Include="src\GPU\buffer.cpp" />
@@ -171,7 +174,7 @@
     <ClCompile Include="src\GPU\command_pool.cpp" />
     <ClCompile Include="src\GPU\descriptor_pool.cpp" />
     <ClCompile Include="src\GPU\descriptor_set.cpp" />
-    <ClCompile Include="src\GPU\Image.cpp" />
+    <ClCompile Include="src\GPU\image.cpp" />
     <ClCompile Include="src\GPU\mesh.cpp" />
     <ClCompile Include="src\GPU\persistent_staging_buffer.cpp" />
     <ClCompile Include="src\GPU\pipeline.cpp" />
@@ -184,6 +187,10 @@
   <ItemGroup>
     <ClInclude Include="include\Core\camera.h" />
     <ClInclude Include="include\Core\graphics_context.h" />
+    <ClInclude Include="include\Core\graphics_renderer.h" />
+    <ClInclude Include="include\Core\light.h" />
+    <ClInclude Include="include\Core\render_object.h" />
+    <ClInclude Include="include\Core\scene.h" />
     <ClInclude Include="include\Core\scene_data.h" />
     <ClInclude Include="include\Core\window.h" />
     <ClInclude Include="include\Debug\ui.h" />
@@ -192,7 +199,7 @@
     <ClInclude Include="include\GPU\command_pool.h" />
     <ClInclude Include="include\GPU\descriptor_pool.h" />
     <ClInclude Include="include\GPU\descriptor_set.h" />
-    <ClInclude Include="include\GPU\Image.h" />
+    <ClInclude Include="include\GPU\image.h" />
     <ClInclude Include="include\GPU\mesh.h" />
     <ClInclude Include="include\GPU\pipeline.h" />
     <ClInclude Include="include\GPU\sampler.h" />
@@ -201,6 +208,7 @@
     <ClInclude Include="include\Loaders\image_loader.h" />
     <ClInclude Include="include\Loaders\obj_loader.h" />
     <ClInclude Include="include\Utils\VkCheck.h" />
+    <ClInclude Include="include\VulkanRenderer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\basic.frag" />

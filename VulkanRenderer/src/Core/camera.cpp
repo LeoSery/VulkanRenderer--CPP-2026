@@ -59,21 +59,21 @@ void Camera::ProcessInput(GLFWwindow* window, float deltaTime)
 	{
 		glfwGetCursorPos(window, &newMouseX, &newMouseY);
 		m_firstMouse = false;
-		m_lastMouseX = newMouseX;
-		m_lastMouseY = newMouseY;
+		m_lastMouseX = static_cast<float>(newMouseX);
+		m_lastMouseY = static_cast<float>(newMouseY);
 		return;
 	}
 
 	glfwGetCursorPos(window, &newMouseX, &newMouseY);
-	float deltaX = m_lastMouseX - newMouseX;
-	float deltaY = m_lastMouseY - newMouseY;
+	float deltaX = m_lastMouseX - static_cast<float>(newMouseX);
+	float deltaY = m_lastMouseY - static_cast<float>(newMouseY);
 
 	m_yaw += deltaX * m_lookSpeed;
 	m_pitch += deltaY * m_lookSpeed;
 	m_pitch = glm::clamp(m_pitch, -89.0f, 89.0f); // Clamp pitch to avoid gimbal lock when looking straight up or down
 
-	m_lastMouseX = newMouseX;
-	m_lastMouseY = newMouseY;
+	m_lastMouseX = static_cast<float>(newMouseX);
+	m_lastMouseY = static_cast<float>(newMouseY);
 
 	// Position (Keyboard)
 	glm::vec3 currentForwardVector = GetForwardVector();
@@ -105,36 +105,6 @@ glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const
 	projection[1][1] *= -1; // Y-flip Vulkan > Vulkan's Y axis is flipped compared to OpenGL/GLM convention
 
 	return projection;
-}
-
-glm::vec3 Camera::GetPosition() const
-{
-	return m_position;
-}
-
-float Camera::GetFOV() const
-{
-	return m_fov;
-}
-
-float Camera::GetNearPlane() const
-{
-	return m_nearPlane;
-}
-
-float Camera::GetFarPlane() const
-{
-	return m_farPlane;
-}
-
-float Camera::GetMoveSpeed() const
-{
-	return m_moveSpeed;
-}
-
-bool Camera::IsCameraActive() const
-{
-	return m_isCameraActive;
 }
 
 void Camera::SetPosition(const glm::vec3& position)

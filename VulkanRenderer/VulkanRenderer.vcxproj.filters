@@ -81,7 +81,7 @@
     <ClCompile Include="src\GPU\sampler.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
-    <ClCompile Include="src\GPU\Image.cpp">
+    <ClCompile Include="src\GPU\image.cpp">
       <Filter>Fichiers sources\GPU</Filter>
     </ClCompile>
     <ClCompile Include="src\GPU\descriptor_pool.cpp">
@@ -102,14 +102,23 @@
     <ClCompile Include="src\Core\camera.cpp">
       <Filter>Fichiers sources\Core</Filter>
     </ClCompile>
-    <ClCompile Include="src\Core\scene_data.cpp">
-      <Filter>Fichiers sources\Core</Filter>
-    </ClCompile>
     <ClCompile Include="src\Loaders\image_loader.cpp">
       <Filter>Fichiers sources\Loaders</Filter>
     </ClCompile>
     <ClCompile Include="src\Debug\ui.cpp">
       <Filter>Fichiers sources\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\light.cpp">
+      <Filter>Fichiers sources\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\scene.cpp">
+      <Filter>Fichiers sources\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\graphics_renderer.cpp">
+      <Filter>Fichiers sources\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Core\render_object.cpp">
+      <Filter>Fichiers sources\Core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -140,7 +149,7 @@
     <ClInclude Include="include\GPU\sampler.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
-    <ClInclude Include="include\GPU\Image.h">
+    <ClInclude Include="include\GPU\image.h">
       <Filter>Fichiers d%27en-tête\GPU</Filter>
     </ClInclude>
     <ClInclude Include="include\GPU\descriptor_pool.h">
@@ -169,6 +178,21 @@
     </ClInclude>
     <ClInclude Include="include\Debug\ui.h">
       <Filter>Fichiers d%27en-tête\Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\light.h">
+      <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\scene.h">
+      <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\graphics_renderer.h">
+      <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Core\render_object.h">
+      <Filter>Fichiers d%27en-tête\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="include\VulkanRenderer.h">
+      <Filter>Fichiers d%27en-tête</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -7,29 +7,15 @@
 #include "Utils/VkCheck.h"
 
 #include <array>
+#include <vector>
 
 // Constructors && Destructors
-DescriptorSet::DescriptorSet(GraphicsContext& ctx, CreateInfos& infos) : m_ctx(&ctx)
+DescriptorSet::DescriptorSet(GraphicsContext& ctx, DescriptorSet::CreateInfos& infos) : m_ctx(&ctx)
 {
-	// 1. Create layout with two bindings :
-	//		- binding 0 : Combined image sampler (texture)
-	//		- binding 1 : Uniform buffer (ImGUI Data, uupdated each frame from CPU)
-	std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
-
-	bindings[0].binding = 0;
-	bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	bindings[0].descriptorCount = 1;
-	bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	bindings[1].binding = 1;
-	bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	bindings[1].descriptorCount = 1;
-	bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
 	VkDescriptorSetLayoutCreateInfo layoutInfos{};
 	layoutInfos.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfos.bindingCount = static_cast<uint32_t>(bindings.size());
-	layoutInfos.pBindings = bindings.data();
+	layoutInfos.bindingCount = static_cast<uint32_t>(infos.bindings.size());
+	layoutInfos.pBindings = infos.bindings.empty() ? nullptr : infos.bindings.data();
 
 	VK_CHECK(vkCreateDescriptorSetLayout(ctx.GetDevice(), &layoutInfos, nullptr, &m_descriptorSetLayout));
 

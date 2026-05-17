@@ -1,7 +1,7 @@
 #include "GPU/command_buffer.h"
 #include "GPU/command_pool.h"
 #include "Utils/VkCheck.h"
-#include "GPU/Image.h"
+#include "GPU/image.h"
 
 #include <vulkan/vulkan.h>
 #include <stdexcept>

@@ -17,7 +17,7 @@ int main()
     // Key light > warm, main, high front-right
     Light* keyLight = mainScene.AddLight("Key Light");
     keyLight->SetDirection(0.639f, 0.426f, 0.639f);
-    keyLight->SetColor(1.0f, 0.92f, 0.78f); // Pale blueish white, cool
+    keyLight->SetColor(1.0f, 0.92f, 0.78f);    // Warm white, slightly golden
     keyLight->SetAmbientStrength(0.15f);
     keyLight->SetSpecularStrength(0.5f);
     keyLight->SetShininess(32.0f);
@@ -33,7 +33,7 @@ int main()
     // Rim light > neutral, high from behind, outline
     Light* rimLight = mainScene.AddLight("Rim Light");
     rimLight->SetDirection(0.0f, 0.8f, -0.6f);
-    rimLight->SetColor(0.4f, 0.52f, 0.65f);    // Very slightly warm white
+    rimLight->SetColor(0.4f, 0.52f, 0.65f);    // Pale cool blue, cinematic rim
     rimLight->SetAmbientStrength(0.0f);
     rimLight->SetSpecularStrength(0.5f);
     rimLight->SetShininess(64.0f);

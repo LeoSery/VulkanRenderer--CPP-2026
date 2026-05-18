@@ -28,6 +28,7 @@
 #define GLM_FORCE_LEFT_HANDED
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 #include <array>
 #include <vector>
@@ -153,10 +154,10 @@ GraphicsContext::GraphicsContext(Window& window) : m_pImpl(std::make_unique<Impl
 	InitDevice();
 	InitAllocator();
 	InitPersistentBuffer();
-	InitSwapchain(window);
+	InitSwapchain();
 	InitImages();
 	InitFrameData();
-	InitDesccriptorPool();
+	InitDescriptorPool();
 	InitSceneDescriptors();
 	InitPipeline();
 	InitDebugUI();
@@ -220,8 +221,21 @@ GraphicsContext::~GraphicsContext()
 	// Swapchain
 	vkb::destroy_swapchain(m_pImpl->vkbSwapchain);
 
-	// Allocator, Device, Surface and Instance
+	// Allocator
+#ifdef _DEBUG
+	VmaTotalStatistics stats;
+	vmaCalculateStatistics(m_pImpl->allocator, &stats);
+
+	std::cout << "[VMA Final Stats] Allocations: " << stats.total.statistics.allocationCount << " | Bytes: " << stats.total.statistics.allocationBytes << "\n";
+
+	if (stats.total.statistics.allocationCount > 0)
+	{
+		std::cout << "[VMA WARNING] Memory leak detected!\n";
+	}
+#endif
 	vmaDestroyAllocator(m_pImpl->allocator);
+
+	// Device, Surface and Instance
 	vkDestroyDevice(m_pImpl->device, nullptr);
 	vkDestroySurfaceKHR(m_pImpl->vkbInstance.instance, m_pImpl->surface, nullptr);
 	vkb::destroy_instance(m_pImpl->vkbInstance);
@@ -246,14 +260,25 @@ void GraphicsContext::BeginFrame()
 	frame.commandBuffer->ResetFence();
 
 	// Request the next available image from the swapchain
-	VK_CHECK(vkAcquireNextImageKHR(
+	VkResult acquireResult = vkAcquireNextImageKHR(
 		m_pImpl->device,
 		m_pImpl->vkbSwapchain.swapchain,
 		UINT64_MAX,
 		frame.isImageAvailable,
 		VK_NULL_HANDLE,
 		&m_pImpl->swapchainImageIndex
-	));
+	);
+
+	// Here, we don't use “VK_CHECK()” but a manual condition to precisely target the window resize event.
+	if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) // Window has trigger resize event
+	{
+		RecreateSwapchain();
+		return;
+	}
+	else if (acquireResult != VK_SUCCESS && acquireResult != VK_SUBOPTIMAL_KHR)
+	{
+		throw std::runtime_error("GraphicsContext > BeginFrame(): Failed to acquire swapchain image");
+	}
 
 	// Begin recording > Writing all GPU commands into the command buffer for later submission
 	encoder = frame.commandBuffer->BeginRecording();
@@ -472,7 +497,16 @@ void GraphicsContext::EndFrame()
 	presentInfos.pSwapchains = &m_pImpl->vkbSwapchain.swapchain;
 	presentInfos.pImageIndices = &m_pImpl->swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(m_pImpl->graphicsQueue, &presentInfos));
+	VkResult presentResult = vkQueuePresentKHR(m_pImpl->graphicsQueue, &presentInfos);
+
+	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR)
+	{
+		RecreateSwapchain();
+	}
+	else if (presentResult != VK_SUCCESS)
+	{
+		throw std::runtime_error("GraphicsContext > EndFrame(): Failed to present swapchain image");
+	}
 
 	m_pImpl->currentFrame = (m_pImpl->currentFrame + 1) % FRAMES_IN_FLIGHT;
 }
@@ -640,8 +674,13 @@ void GraphicsContext::InitAllocator()
 	VK_CHECK(vmaCreateAllocator(&allocatorInfos, &m_pImpl->allocator));
 }
 
-void GraphicsContext::InitSwapchain(Window& window)
+void GraphicsContext::InitSwapchain()
 {
+	int width = 0;
+	int height = 0;
+
+	glfwGetFramebufferSize(m_pImpl->window, &width, &height);
+
 	vkb::SwapchainBuilder builder{
 		m_pImpl->physicalDevice,
 		m_pImpl->device,
@@ -655,8 +694,8 @@ void GraphicsContext::InitSwapchain(Window& window)
 		})
 	.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
 	.set_desired_extent(
-		static_cast<uint32_t>(window.GetWidth()),
-		static_cast<uint32_t>(window.GetHeight())
+		static_cast<uint32_t>(width),
+		static_cast<uint32_t>(height)
 	)
 	.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 	.build();
@@ -677,6 +716,30 @@ void GraphicsContext::InitSwapchain(Window& window)
 	{
 		m_pImpl->swapchainImages.push_back(std::make_unique<Image>(*this, vkImages[i], vkImageViews[i], format, m_pImpl->swapchainExtent.width, m_pImpl->swapchainExtent.height));
 	}
+}
+
+void GraphicsContext::RecreateSwapchain()
+{
+	int width = 0;
+	int height = 0;
+
+	glfwGetFramebufferSize(m_pImpl->window, &width, &height);
+
+	while (width == 0 || height == 0 && !glfwWindowShouldClose(m_pImpl->window))
+	{
+		glfwGetFramebufferSize(m_pImpl->window, &width, &height);
+		glfwWaitEvents();
+	}
+
+	vkDeviceWaitIdle(m_pImpl->device);
+
+	m_pImpl->backbuffer.reset();
+	m_pImpl->depthbuffer.reset();
+	m_pImpl->swapchainImages.clear();
+	vkb::destroy_swapchain(m_pImpl->vkbSwapchain);
+
+	InitSwapchain();
+	InitImages();
 }
 
 void GraphicsContext::InitImages()
@@ -732,7 +795,7 @@ void GraphicsContext::InitFrameData()
 	}
 }
 
-void GraphicsContext::InitDesccriptorPool()
+void GraphicsContext::InitDescriptorPool()
 {
 	DescriptorPool::CreateInfos descriptorPoolInfos{};
 	descriptorPoolInfos.maxSets = 32;

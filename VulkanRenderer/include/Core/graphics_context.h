@@ -45,10 +45,11 @@ private:
 	void InitDevice();
 	void InitPersistentBuffer();
 	void InitAllocator();
-	void InitSwapchain(Window& window);
+	void InitSwapchain();
+	void RecreateSwapchain();
 	void InitImages();
 	void InitFrameData();
-	void InitDesccriptorPool();
+	void InitDescriptorPool();
 	void InitSceneDescriptors();
 	void InitPipeline();
 	void InitDebugUI();

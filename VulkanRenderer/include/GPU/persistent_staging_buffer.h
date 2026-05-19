@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+
 #include <vulkan/vulkan.h>
 
 class GraphicsContext;

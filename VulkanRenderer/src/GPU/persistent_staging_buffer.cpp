@@ -1,5 +1,7 @@
 #include "GPU/persistent_staging_buffer.h"
+
 #include "Core/graphics_context.h"
+
 #include "GPU/buffer.h"
 
 StagingBufferHandle::StagingBufferHandle(Buffer* buffer, bool owned, PersistentStagingBuffer* pool) : m_buffer(buffer), m_owned(owned), m_persistentStagingBuffer(pool)

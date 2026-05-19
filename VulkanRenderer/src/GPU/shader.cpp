@@ -1,12 +1,15 @@
 #include "GPU/shader.h"
+
 #include "Core/graphics_context.h"
+
 #include "Utils/VkCheck.h"
 
-#include <vulkan/vulkan.h>
-#include <fstream>
-#include <vector>
-#include <stdexcept>
 #include <spirv_reflect.h>
+#include <vulkan/vulkan.h>
+
+#include <fstream>
+#include <stdexcept>
+#include <vector>
 
 struct Shader::Impl
 {

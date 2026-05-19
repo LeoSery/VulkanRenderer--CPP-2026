@@ -1,12 +1,16 @@
 #include "GPU/buffer.h"
+
 #include "Core/graphics_context.h"
+
 #include "GPU/command_pool.h"
 #include "GPU/command_buffer.h"
-#include "Utils/VkCheck.h"
 #include "GPU/persistent_staging_buffer.h"
 
-#include <vulkan/vulkan.h>
+#include "Utils/VkCheck.h"
+
 #include <vma/vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
+
 #include <cstring>
 #include <stdexcept>
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include <stdexcept>
-#include <array>
 #include <vector>
+
+#include <vulkan/vulkan.h>
 
 class GraphicsContext;
 class DescriptorPool;

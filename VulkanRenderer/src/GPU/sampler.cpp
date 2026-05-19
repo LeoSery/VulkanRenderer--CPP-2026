@@ -1,8 +1,12 @@
 #include "GPU/sampler.h"
+
 #include "Core/graphics_context.h"
+
 #include "Utils/VkCheck.h"
 
 #include <vulkan/vulkan.h>
+
+#include <stdexcept>
 
 // Helpers
 static VkFilter ConvertToVkFilter(Sampler::E_Filter filter)

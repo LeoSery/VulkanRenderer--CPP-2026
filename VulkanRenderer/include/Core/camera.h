@@ -1,11 +1,10 @@
 #pragma once
 
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_LEFT_HANDED
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+
+struct GLFWwindow;
 
 class Camera
 {

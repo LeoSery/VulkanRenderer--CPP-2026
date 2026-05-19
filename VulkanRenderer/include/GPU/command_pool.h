@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
 #include <memory>
+
+#include <vulkan/vulkan.h>
 
 class GraphicsContext;
 class CommandBuffer;

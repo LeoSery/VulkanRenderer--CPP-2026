@@ -44,10 +44,10 @@
       <UniqueIdentifier>{227943d8-1578-42c3-ad04-265d1e5ecc18}</UniqueIdentifier>
     </Filter>
     <Filter Include="Fichiers d%27en-tête\Debug">
-      <UniqueIdentifier>{1acd1cf6-5d9e-462d-99ee-c259e042d0a7}</UniqueIdentifier>
+      <UniqueIdentifier>{8acb99db-6ed8-47e0-b73c-5e1e3b7c392b}</UniqueIdentifier>
     </Filter>
     <Filter Include="Fichiers sources\Debug">
-      <UniqueIdentifier>{f5f0dec8-96ef-4258-9075-ffdd0ad61718}</UniqueIdentifier>
+      <UniqueIdentifier>{c157e736-2308-4220-be74-d4e500f6c009}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -105,9 +105,6 @@
     <ClCompile Include="src\Loaders\image_loader.cpp">
       <Filter>Fichiers sources\Loaders</Filter>
     </ClCompile>
-    <ClCompile Include="src\Debug\ui.cpp">
-      <Filter>Fichiers sources\Debug</Filter>
-    </ClCompile>
     <ClCompile Include="src\Core\light.cpp">
       <Filter>Fichiers sources\Core</Filter>
     </ClCompile>
@@ -119,6 +116,9 @@
     </ClCompile>
     <ClCompile Include="src\Core\render_object.cpp">
       <Filter>Fichiers sources\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Debug\ui.cpp">
+      <Filter>Fichiers sources\Debug</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -176,9 +176,6 @@
     <ClInclude Include="include\Loaders\image_loader.h">
       <Filter>Fichiers d%27en-tête\Loaders</Filter>
     </ClInclude>
-    <ClInclude Include="include\Debug\ui.h">
-      <Filter>Fichiers d%27en-tête\Debug</Filter>
-    </ClInclude>
     <ClInclude Include="include\Core\light.h">
       <Filter>Fichiers d%27en-tête\Core</Filter>
     </ClInclude>
@@ -193,6 +190,9 @@
     </ClInclude>
     <ClInclude Include="include\VulkanRenderer.h">
       <Filter>Fichiers d%27en-tête</Filter>
+    </ClInclude>
+    <ClInclude Include="include\Debug\ui.h">
+      <Filter>Fichiers d%27en-tête\Debug</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

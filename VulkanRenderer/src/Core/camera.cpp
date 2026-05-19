@@ -1,6 +1,8 @@
 #include "Core/camera.h"
 
+#include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 // Spherical coordinates formula: convert yaw/pitch angles to a 3D direction vector
 // forward.x = cos(yaw) * cos(pitch)

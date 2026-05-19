@@ -1,9 +1,13 @@
 #include "GPU/pipeline.h"
-#include "GPU/shader.h"
+
 #include "Core/graphics_context.h"
+
+#include "GPU/shader.h"
+
 #include "Utils/VkCheck.h"
 
 #include <vulkan/vulkan.h>
+
 #include <stdexcept>
 #include <vector>
 

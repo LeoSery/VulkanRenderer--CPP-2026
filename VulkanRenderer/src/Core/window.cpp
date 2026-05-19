@@ -1,4 +1,5 @@
-#include "core/window.h"
+#include "Core/window.h"
+
 #include <GLFW/glfw3.h>
 
 Window::Window(int width, int height, const std::string& title) : m_width(width), m_height(height)

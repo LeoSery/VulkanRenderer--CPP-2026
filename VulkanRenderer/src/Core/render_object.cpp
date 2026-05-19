@@ -1,15 +1,16 @@
 #include "Core/render_object.h"
-#include "GPU/mesh.h"
-#include "GPU/image.h"
-#include "GPU/sampler.h"
-#include "GPU/descriptor_set.h"
-#include "GPU/descriptor_pool.h"
-#include "GPU/buffer.h"
 
 #include "Core/graphics_context.h"
 
-#include "Loaders/obj_loader.h"
+#include "GPU/buffer.h"
+#include "GPU/descriptor_pool.h"
+#include "GPU/descriptor_set.h"
+#include "GPU/image.h"
+#include "GPU/mesh.h"
+#include "GPU/sampler.h"
+
 #include "Loaders/image_loader.h"
+#include "Loaders/obj_loader.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtc/matrix_transform.hpp>

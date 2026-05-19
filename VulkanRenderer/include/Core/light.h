@@ -2,7 +2,6 @@
 
 #include "Core/scene_data.h"
 
-#include <glm/glm.hpp>
 #include <string>
 
 class Light

@@ -1,40 +1,43 @@
 #include "Core/graphics_context.h"
+
+#include "Core/camera.h"
+#include "Core/light.h"
+#include "Core/render_object.h"
+#include "Core/scene.h"
+#include "Core/scene_data.h"
 #include "Core/window.h"
-#include "GPU/command_pool.h"
+
 #include "GPU/command_buffer.h"
-#include "GPU/image.h"
-#include "Utils/VkCheck.h"
-#include "GPU/shader.h"
-#include "GPU/pipeline.h"
-#include "GPU/sampler.h"
+#include "GPU/command_pool.h"
 #include "GPU/descriptor_pool.h"
 #include "GPU/descriptor_set.h"
-#include "GPU/Buffer.h"
-#include "GPU/persistent_staging_buffer.h"
-#include "Core/scene_data.h"
-#include "Debug/ui.h"
-#include "Core/scene.h"
-#include "Core/render_object.h"
-#include "Core/camera.h"
+#include "GPU/image.h"
 #include "GPU/mesh.h"
-#include "Core/light.h"
+#include "GPU/persistent_staging_buffer.h"
+#include "GPU/pipeline.h"
+#include "GPU/sampler.h"
+#include "GPU/shader.h"
+#include "GPU/buffer.h"
 
-#include <vulkan/vulkan.h>
-#include <VkBootstrap.h>
-#include <vma/vk_mem_alloc.h>
-#include <GLFW/glfw3.h>
+#include "Debug/ui.h"
+
+#include "Utils/VkCheck.h"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_LEFT_HANDED
+#include <GLFW/glfw3.h>
+#include <VkBootstrap.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <iostream>
+#include <vma/vk_mem_alloc.h>
+#include <vulkan/vulkan.h>
 
 #include <array>
-#include <vector>
-#include <stdexcept>
-#include <memory>
 #include <cassert>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <vector>
 
 // Anonymous namespace to keep data private outside of this file
 namespace

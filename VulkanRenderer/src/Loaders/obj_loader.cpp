@@ -1,13 +1,15 @@
 #include "Loaders/obj_loader.h"
-#include "GPU/mesh.h"
-#include "GPU/buffer.h"
+
 #include "Core/graphics_context.h"
 
-#include <rapidobj/rapidobj.hpp>
-#include <glm/glm.hpp>
+#include "GPU/mesh.h"
+#include "GPU/buffer.h"
 
-#include <unordered_map>
+#include <glm/glm.hpp>
+#include <rapidobj/rapidobj.hpp>
+
 #include <stdexcept>
+#include <unordered_map>
 
 // anonymous namespace > equivalent to private section but for an namespace instead of a class
 namespace

@@ -1,7 +1,6 @@
 #include "Core/light.h"
 
 #include <glm/glm.hpp>
-#include <string>
 
 Light::Light(const std::string& name) : m_name(name), m_direction(0.0f, -1.0f, 1.0f), m_color(1.0, 1.0, 1.0), m_ambientStrength(0.1f), m_specularStrength(0.5f), m_shininess(32.0f), m_isDirty(true)
 {

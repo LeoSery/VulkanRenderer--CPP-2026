@@ -1,9 +1,12 @@
 #include "GPU/descriptor_set.h"
+
+#include "Core/graphics_context.h"
+
+#include "GPU/buffer.h"
 #include "GPU/descriptor_pool.h"
 #include "GPU/image.h"
 #include "GPU/sampler.h"
-#include "GPU/buffer.h"
-#include "Core/graphics_context.h"
+
 #include "Utils/VkCheck.h"
 
 #include <array>

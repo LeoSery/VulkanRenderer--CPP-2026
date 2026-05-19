@@ -1,8 +1,9 @@
 #include "Core/graphics_renderer.h"
-#include "Core/window.h"
+
+#include "Core/camera.h"
 #include "Core/graphics_context.h"
 #include "Core/scene.h"
-#include "Core/camera.h"
+#include "Core/window.h"
 
 GraphicsRenderer::GraphicsRenderer(const std::string& title, int width, int height)
 	: m_window(std::make_unique<Window>(width, height, title)),

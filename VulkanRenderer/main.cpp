@@ -14,6 +14,11 @@ int main()
     frogObject->SetTexture("assets/Textures/FrogThisWay/Tx_Frogv1_D.jpg");
     frogObject->SetRotation(0.0f, 0.0f, 0.0f);
 
+    RenderObject* frogObject2 = mainScene.AddObject("Frog2");
+    frogObject2->SetMesh("assets/Meshs/FrogThisWay/Frog.obj");
+    frogObject2->SetTexture("assets/Textures/FrogThisWay/Tx_Frogv1_D.jpg");
+    frogObject2->SetRotation(3.0f, 0.0f, 0.0f);
+
     // Key light > warm, main, high front-right
     Light* keyLight = mainScene.AddLight("Key Light");
     keyLight->SetDirection(0.639f, 0.426f, 0.639f);

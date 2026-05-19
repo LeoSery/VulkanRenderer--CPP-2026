@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "C:\\Users\\seryl\\Desktop\\Fichiers\\Perso\\Dev\\Engine\\VulkanRenderer--CPP-2026\\build\\VulkanRenderer\\Debug\\VulkanRenderer.obj",
+            "outputs": [
+                "C:\\Users\\seryl\\Desktop\\Fichiers\\Perso\\Dev\\Engine\\VulkanRenderer--CPP-2026\\build\\VulkanRenderer\\Debug\\VulkanRenderer.h_8C23366FDC6ABF24.ifc.dt.module.json",
+                "C:\\Users\\seryl\\Desktop\\Fichiers\\Perso\\Dev\\Engine\\VulkanRenderer--CPP-2026\\build\\VulkanRenderer\\Debug\\VulkanRenderer.h_8C23366FDC6ABF24.ifc.dt.d.json",
+                "C:\\Users\\seryl\\Desktop\\Fichiers\\Perso\\Dev\\Engine\\VulkanRenderer--CPP-2026\\build\\VulkanRenderer\\Debug\\VulkanRenderer.h.ifc"
+            ],
+            "provides": [
+                {
+                    "logical-name": "C:\\Users\\seryl\\Desktop\\Fichiers\\Perso\\Dev\\Engine\\VulkanRenderer--CPP-2026\\VulkanRenderer\\VulkanRenderer.h",
+                    "source-path": "c:\\users\\seryl\\desktop\\fichiers\\perso\\dev\\engine\\vulkanrenderer--cpp-2026\\vulkanrenderer\\vulkanrenderer.h",
+                    "lookup-method": "absolute"
+                }
+            ],
+            "requires": []
+        }
+    ]
+}

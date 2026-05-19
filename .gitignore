@@ -2,8 +2,6 @@
 *.d
 *.slo
 *.lo
-*.o
-*.obj
 *.gch
 *.pch
 *.so
@@ -28,8 +26,11 @@
 *.userprefs
 mono_crash.*
 
+# Keep project files, but ignore user-specific settings
+!VulkanRenderer/VulkanRenderer.vcxproj.user 
+
 # Build results
-[Dd]ebug/
+/[Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
@@ -97,9 +98,6 @@ node_modules/
 ###        VULKAN RENDERER - SPECIFIC         ###
 ### ========================================= ###
 
-# Compiled SPIR-V shaders
-*.spv
-
 # External dependencies > DO NOT ignore
 # (headers and third-party libraries committed voluntarily)
 !**/external/include/**
@@ -127,9 +125,6 @@ New_Renderer/x64/
 
 # Vulkan validation layer settings (local only)
 vk_layer_settings.txt
-
-# vulkan shaders
-*.spv
 
 # vcpkg installed packages (generated from vcpkg.json)
 vcpkg_installed/

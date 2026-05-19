@@ -1,0 +1,29 @@
+﻿  main.cpp
+  camera.cpp
+  graphics_context.cpp
+  graphics_renderer.cpp
+  light.cpp
+  render_object.cpp
+  scene.cpp
+  window.cpp
+  ui.cpp
+  buffer.cpp
+  command_buffer.cpp
+  command_pool.cpp
+  descriptor_pool.cpp
+  descriptor_set.cpp
+  image.cpp
+  mesh.cpp
+  persistent_staging_buffer.cpp
+  pipeline.cpp
+  sampler.cpp
+  shader.cpp
+  Génération de code en cours...
+  Compilation en cours...
+  image_loader.cpp
+  obj_loader.cpp
+  vma_impl.cpp
+  Génération de code en cours...
+  VulkanRenderer.vcxproj -> C:\Users\seryl\Desktop\Fichiers\Perso\Dev\Engine\VulkanRenderer--CPP-2026\lib\VulkanRenderer_Debug.exe
+  'pwsh.exe' n'est pas reconnu en tant que commande interne
+  ou externe, un programme exécutable ou un fichier de commandes.
